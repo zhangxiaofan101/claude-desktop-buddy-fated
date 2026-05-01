@@ -3,153 +3,199 @@
 [English](README.md) · **简体中文**
 
 > **Fork 自 [anthropics/claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy)。**
-> 上游的硬件 buddy 固件原样保留；本 fork 额外加入了两件事：把 Anthropic 在
-> 2026 年初短暂上线、随后就被废弃的 Claude Code **本命 `/buddy`**（账号决
-> 定的那只）找回来；以及当 feature flag 拉不到、硬件 buddy 菜单不显示时
-> 用的一个本地 override 小工具。
+> 原版硬件 buddy 固件原封保留；本 fork 补了几样东西：找回 Anthropic
+> 早期发过又下线的**本命（账号绑定、"fated"）`/buddy`** 的工具链，
+> 把这只 buddy 的名字和七条 state line 直接编进固件，以及一个在
+> feature flag fetch 被卡时让 Hardware Buddy 菜单显示出来的本地
+> override。
 
-Claude 的 macOS / Windows 桌面端可以通过 BLE 把 Claude Cowork 和 Claude
-Code 连到 maker 设备上，让开发者能做硬件来显示权限请求、最近消息、各
-种交互。上游项目以一个 ESP32 桌面宠物固件作为参考实现，自带 18 种
-ASCII 宠物可循环切换。
-
-本 fork 多做了一件小事：每个 Claude Code 账号当年都有过一只**本命
-buddy** —— 物种、稀有度、眼睛、帽子、属性、名字、人格全部由账号 UUID
-决定。暴露这只 buddy 的 `/buddy` 命令大约在 2026-04-10 前后从 Claude
-Code 移除，但生成算法被 [`jrykn/save-buddy`][save-buddy] 完整逆向出来
-了，所以分配结果**仍然可以离线复算**。`tools/my-buddy/` 把这套算法浓缩
-进一个文件，并把物种映射到固件的 `SPECIES_TABLE` 顺序里，让你能直接在
-M5 stick 上选中你的本命宠物。
-
-> **只是想自己造硬件？** 那其实你不需要这里面的代码。看
-> **[REFERENCE.md](REFERENCE.md)** 就够了：Nordic UART 服务的 UUID、
-> JSON 协议、文件夹推送传输全部在那里。
-
-举个例子：上游用 ESP32 做了一只桌面宠物，靠权限批准和与 Claude 的交互
-"活着"。没事的时候它睡觉、会话开始时它醒来、有 approval 等着的时候它会
-显得不耐烦，并且能直接在设备上批准或拒绝。
+刷完这个 fork，你拿到的是一台手腕大小的设备，开机直接是**你的** Claude
+Code 本命同伴——物种、名字、七条状态台词，全部由你的 account UUID 通
+过 Anthropic 那个已经下线的 `/buddy` 用过的确定性算法推出来。
 
 <p align="center">
-  <img src="docs/device.jpg" alt="M5StickC Plus running the buddy firmware" width="500">
+  <img src="docs/device.jpg" alt="M5StickC Plus 跑 buddy 固件" width="500">
 </p>
 
-## 硬件
+> **想从零自己做一台？** 不用看本仓库代码。BLE 协议线上规格在
+> **[REFERENCE.md](REFERENCE.md)**：Nordic UART Service UUID、JSON
+> schema、文件夹推送传输。
 
-固件目标平台是 ESP32 + Arduino framework。代码依赖 M5StickCPlus 的库
-(显示、IMU、按键)，所以你需要这块板子，或者自己 fork 替换掉这些驱动
-适配你的引脚布局。
+---
 
-## 烧录
+## 上手五步
 
-先安装
-[PlatformIO Core](https://docs.platformio.org/en/latest/core/installation/),
-然后:
+端到端五步搞定，编号过的——你不用读后面其它任何章节也能跑起来。
+每步都对应下面有详细解释的小节。
+
+```
+ 1. 算骨架  ─→  2. 孵灵魂  ─→  3. 烧固件  ─→  4. 配对  ─→  5. （可选）热推
+   bones      name + lines      firmware       BLE         不重刷在线改
+```
+
+### 1. 算骨架（bones）
+
+确定性那一半——物种、稀有度、眼、帽子、shiny、五维属性。一条命令：
+
+```bash
+bun run tools/my-buddy/compute.js
+```
+
+需要 [Bun](https://bun.sh)（Anthropic 当年的 client 也跑在 Bun 下，
+PRNG 种子用的是 `Bun.hash`，换 Node 跑得到的是另一只）。默认从
+`~/.claude.json` 读 `oauthAccount.accountUuid`，也可以传一个 UUID
+作为第一个参数。
+
+脚本会打印一张漂亮的卡片以及 firmware 物种 idx。把物种 / 稀有度 /
+属性记下来，第 2 步要用。
+
+### 2. 孵灵魂
+
+确定性算法只产出 *bones*。原版流程后面还会得到一个 `name` 和一句
+`personality`，是 Anthropic 的 LLM 在 hatch 时通过 `buddy_react`
+端点写出来的。**那个端点 2026-04-10 前后下线了**，所以这一半现在只
+能由本地手头任意一个 LLM 离线写。
+
+在本 fork 里，做这件事 = 手填 `tools/my-buddy/my-buddy.json`（或者
+让任何 LLM 按
+[`tools/my-buddy/README.md`](tools/my-buddy/README.md) 里的
+*Offline-hatch protocol* 协议写）：
+
+```jsonc
+{
+  "bones":          { /* 第 1 步算出来的 */ },
+  "firmwareIdx":    1,                          // 第 1 步打印的
+  "inspirationSeed": 441251612,                 // 第 1 步打印的
+  "name":           "Pondsage",                 // LLM 写的
+  "personality":    "Lakeside sage. Speaks in flat quacks. Profound until a stack trace appears.",
+  "stateLines": {                               // 七个 firmware state，每个一条短句
+    "sleep":     "the pond dreams too.",
+    "idle":      "still water. still me.",
+    "busy":      "the current does the work.",
+    "attention": "someone's calling me.",
+    "celebrate": "a quiet quack of yes.",
+    "dizzy":     "even lakes catch chill.",
+    "heart":     "two ripples, one pond."
+  }
+}
+```
+
+声音规则——属性和 rarity 怎么决定 buddy 能讲什么话（比如高 WISDOM
++ 低 DEBUGGING 出来的就是"哲思但调试就走神"那种感觉；`common` 不
+应该说 `legendary` 才配的台词）——见
+[`tools/my-buddy/README.md`](tools/my-buddy/README.md) 的
+*Offline-hatch protocol* 一节。每条 stateLine 一定要短，要在
+135×240 竖屏上瞬间能看完，不是写散文。
+
+Roadmap 上有个 WIP 的 `tools/hatch/`，会自动帮你跑这一步——拿
+bones 调 `claude -p` 一站式生成 name + personality + stateLines。在
+那之前，这步是一次手动 copy-paste 流程。
+
+### 3. 烧固件
+
+装 [PlatformIO Core](https://docs.platformio.org/en/latest/core/installation/)，
+然后：
 
 ```bash
 pio run -t upload
 ```
 
-如果设备上次刷过别的固件，先擦除:
+构建期一个 hook（`tools/my-buddy/gen_defaults.py`）会读
+`tools/my-buddy/my-buddy.json` 生成 `src/my_buddy_defaults.h`，固件
+拿它当编译期默认值。**全新刷完第一次开机就直接是你的本命 buddy**——
+名字、物种、七条声音全部就位，不用再做任何事。
+
+如果设备上有别人之前推过的旧 NVS 数据，先擦再刷：
 
 ```bash
 pio run -t erase && pio run -t upload
 ```
 
-跑起来之后，也可以从设备本身擦除：**长按 A → settings → reset →
-factory reset → 双击确认**。
+也可以直接在设备上 factory reset：**长按 A → settings → reset →
+factory reset → 连点两下**。
 
-## 配对
+### 4. 配对 Claude Desktop
 
-要把设备和 Claude 配对，先开启开发者模式（**Help → Troubleshooting →
-Enable Developer Mode**），然后在 **Developer → Open Hardware Buddy…**
-里打开 Hardware Buddy 窗口，点 **Connect**，从列表里选你的设备。
-macOS 第一次连接时会弹蓝牙权限请求，授权即可。
+打开 Hardware Buddy 窗口：**Developer → Open Hardware Buddy…**（需要
+先开 Developer Mode：**Help → Troubleshooting → Enable Developer Mode**）。
+点 **Connect**，选你的设备，第一次连接 macOS 会弹蓝牙权限——同意。
 
 <p align="center">
-  <img src="docs/menu.png" alt="Developer → Open Hardware Buddy… menu item" width="420">
-  <img src="docs/hardware-buddy-window.png" alt="Hardware Buddy window with Connect button and folder drop target" width="420">
+  <img src="docs/menu.png" alt="Developer → Open Hardware Buddy… 菜单项" width="420">
+  <img src="docs/hardware-buddy-window.png" alt="Hardware Buddy 窗口的 Connect 按钮和 GIF 拖入区" width="420">
 </p>
 
-配对成功之后，只要两端都没睡，连接会自动恢复。
+配对后两边都醒着的时候桥接会自动重连。
 
-> **打开了开发者模式，但 "Open Hardware Buddy…" 这一项就是不出现?**
-> 这是 GrowthBook flag 的服务端拉取被网络拦下时的常见问题。解决方案见
-> **[`tools/enable-hardware-buddy/`](tools/enable-hardware-buddy/)** 里的
-> 本地 override 小脚本。
+> **"Open Hardware Buddy…" 菜单根本不显示？** 这是 GrowthBook
+> feature flag fetch 在你网络路径上被卡时的已知问题。
+> **[`tools/enable-hardware-buddy/`](tools/enable-hardware-buddy/)**
+> 提供本地 override workaround。
 
-如果搜不到设备：
+### 5. （可选）热推改动
 
-- 确认 stick 是醒着的（按一下任何键）
-- 检查 stick 的 settings 菜单里 bluetooth 是开的
+第 1–3 步走完已经是你的本命 buddy 了——大多数人到这就停了。但如果
+你想**改名字或某条 state line 而不重刷固件**，可以运行时推：
 
-## 按键操作
-
-|                         | 普通态               | Pet         | Info        | Approval  |
-| ----------------------- | -------------------- | ----------- | ----------- | --------- |
-| **A**（正面）           | 下一屏               | 下一屏      | 下一屏      | **批准**  |
-| **B**（右侧）           | 滚动 transcript      | 翻页        | 翻页        | **拒绝**  |
-| **长按 A**              | 进菜单               | 进菜单      | 进菜单      | 进菜单    |
-| **Power**（左侧短按）   | 屏幕开/关            |             |             |           |
-| **Power**（左侧 ~6s）   | 硬关机               |             |             |           |
-| **摇晃**                | 头晕                 |             |             | —         |
-| **正面朝下**            | 小睡（精力回复）     |             |             |           |
-
-无操作 30 秒后屏幕自动熄灭（有 approval 等待时不熄）。任意按键唤醒。
-
-## ASCII 宠物
-
-18 种宠物，每种 7 个动画态（sleep / idle / busy / attention /
-celebrate / dizzy / heart）。**菜单 → "next pet"** 循环切换，带计数器，
-选择保存到 NVS。
-
-## GIF 宠物
-
-如果你不想用 ASCII buddy，想用自定义 GIF 角色：把一个角色包文件夹拖到
-Hardware Buddy 窗口的 drop target 上，桌面端会通过 BLE 流给 stick，
-stick 实时切到 GIF 模式。**Settings → delete char** 切回 ASCII 模式。
-
-一个角色包是带 `manifest.json` 和 96px 宽 GIF 的文件夹：
-
-```json
-{
-  "name": "bufo",
-  "colors": {
-    "body": "#6B8E23",
-    "bg": "#000000",
-    "text": "#FFFFFF",
-    "textDim": "#808080",
-    "ink": "#000000"
-  },
-  "states": {
-    "sleep": "sleep.gif",
-    "idle": ["idle_0.gif", "idle_1.gif", "idle_2.gif"],
-    "busy": "busy.gif",
-    "attention": "attention.gif",
-    "celebrate": "celebrate.gif",
-    "dizzy": "dizzy.gif",
-    "heart": "heart.gif"
-  }
-}
+```bash
+bun run tools/my-buddy/push.js
 ```
 
-每个状态可以是单个文件名或数组。数组会循环：每次播放结束切下一个，
-适合做 idle 的活动轮播，避免主屏幕只重复一段。
+输出三条 BLE-ready JSON 帧到 stdout（`species` / `name` /
+`statelines`）。用你常用的 BLE writer（LightBlue / bleak / noble
+等）把每行写到 Nordic UART RX 字符。或者设备插着 USB 时直接写串
+口——固件两条通路都解析 JSON。NVS 优先级高于编译期默认值，所以一
+旦推过就以 push 为准，直到下一次 factory reset。
 
-GIF 宽度 96px；高度 ~140px 以内能在 135×240 竖屏内放得下。把角色裁紧——
-透明边距既浪费屏幕空间又会缩小角色。`tools/prep_character.py` 处理
-缩放：喂给它任意大小的源 GIF，它会输出一组 96px 宽的、角色比例统一的
-GIF。
+---
 
-整个文件夹要小于 1.8MB——`gifsicle --lossy=80 -O3 --colors 64` 一般能
-压掉 40–60%。
+## 为什么叫 "fated"
 
-可以参考 `characters/bufo/` 这个能跑的例子。
+Claude Code 的 `/buddy` 斜杠命令 2026 年春天上线，大约一个月后
+（2026-04-10 前后）下线。它在世期间，每个账号都会得到一只确定性
+同伴：把 `accountUuid + "friend-2026-401"` 喂进 FNV-1a（Bun 下
+是 `Bun.hash`）→ mulberry32 PRNG，再按固定顺序从固定列表里抽
+rarity / species / eye / hat / shiny / stats。同一个账号永远出同
+一只。只有 LLM 写的 `name` 和 `personality` 会被持久化——其它字
+段每次渲染都从 seed 重算。
 
-如果你正在调一个角色、不想每次走 BLE 推送，可以用
-`tools/flash_character.py characters/bufo`，它会把素材准备到 `data/` 然
-后直接 `pio run -t uploadfs` 走 USB 烧。
+社区项目 [`jrykn/save-buddy`][save-buddy] 把这个生成器一字不差地
+反推了出来。本 fork 把生成器单文件移植到这里，加了个映射对到固件
+的 `SPECIES_TABLE` 顺序，再加一步 build-time codegen 把 hatch 出
+来的 buddy 编进固件。手腕上这台不是泛指的 Buddy，而是**你的**那
+只——由你的 account UUID 命定。
+
+**我自己的例子**：Pondsage，一只看到栈帧就翻白眼的哲思鸭：
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Species       : DUCK 🦆          (firmware idx 1)
+  Rarity        : common ★
+  Eye           : ◉
+  Hat           : none
+  Shiny         : no
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  DEBUGGING     6   █                ← 弱项
+  PATIENCE     18   ███
+  CHAOS        15   ███
+  WISDOM       68   █████████████    ← 峰值
+  SNARK        44   ████████
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Name: Pondsage
+  "Lakeside sage. Speaks in flat quacks.
+   Profound until a stack trace appears."
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+由 `claude-opus-4-7` 离线 hatch（hatching API 也下线了），约束和原
+版 prompt 一致（≤12 字一个词的名字，一句话 personality，强度由
+rarity 决定）。
+
+---
 
 ## 七种状态
+
+来自上游，未改。每个物种这七个状态都有手写的 ASCII 帧。
 
 | 状态        | 触发条件                    | 表现                              |
 | ----------- | --------------------------- | --------------------------------- |
@@ -163,29 +209,13 @@ GIF。
 
 ## 七种声音（本 fork 新增）
 
-每只本命 buddy 在七个状态下各有一句**自己语气的话**。这些 line 存在
-设备 NVS 里，状态切换时显示在**宠物和底部 HUD/approval 卡片之间**那
-块独立的 speech 区，停留约 4.5 秒——既不被 transcript 流刷走，也不被
-permission prompt 挡住。同一个状态内置 5 分钟冷却，避免 idle↔sleep
-反复横跳变话痨。
+每只本命 buddy 在七个状态下各有一句**自己语气的话**。这些 line 在
+编译期从 `my-buddy.json` 编进固件，运行时也能再写到 NVS。状态切换
+时显示在**宠物和底部 HUD/approval 卡片之间**那块独立的 speech 区，
+停留约 4.5 秒——既不被 transcript 流刷走，也不被 permission prompt
+挡住。同一个状态内置 5 分钟冷却，避免 idle↔sleep 反复横跳变话痨。
 
-这就是 fork 名字里 *fated* 那一半的含义。手腕上的不是泛指的 Buddy，
-而是**你的**那只——物种、属性、名字、声音都是确定性算法 + 一次性
-离线 hatch 从你的账号推出来的。
-
-`name` 和 `stateLines` 写在 `tools/my-buddy/my-buddy.json`。hatch（或
-找回）完之后，一条命令推到设备上：
-
-```bash
-bun run tools/my-buddy/push.js
-# 输出三条 BLE 帧到 stdout：{cmd:"species"}、{cmd:"name"}、
-# {cmd:"statelines"}。用你常用的 BLE writer（LightBlue / bleak /
-# noble 等）依次写到 Nordic UART RX 字符即可。
-# 设备插着 USB 时也能直接写串口——固件两条通路都解析 JSON。
-```
-
-举例：Pondsage（DUCK，common，WISDOM 68 / DEBUGGING 6）讲话语气和
-`legendary` 的 `dragon` 完全不一样：
+Pondsage 是这么说话的：
 
 | 状态        | Pondsage 会说的话             |
 | ----------- | ----------------------------- |
@@ -197,143 +227,158 @@ bun run tools/my-buddy/push.js
 | `dizzy`     | even lakes catch chill.       |
 | `heart`     | two ripples, one pond.        |
 
-如果是 `WISDOM 92 / CHAOS 88` 的 `legendary` 史诗款，`dizzy` 那条估计
-就要离谱得多。声音怎么由 stats 和 rarity 决定，详见
-[`tools/my-buddy/README.md`](tools/my-buddy/README.md) 的
-*Offline-hatch protocol* 一节。
+如果是 `WISDOM 92 / CHAOS 88` 的 `legendary` 史诗款，`dizzy` 那条
+估计就要离谱得多。
 
-设备端也顺手去掉了 `Owner's Buddy` 的旧 header——一旦推过真名，
-Pondsage 就以 **Pondsage** 单独出现，而不是"Xiaofan's Pondsage"。
-主人信息仍然在 INFO 页可见，归属感没丢。
+设备端也顺手去掉了 `Owner's Buddy` 的旧 header——一旦真名进了固
+件或被推过，Pondsage 就以 **Pondsage** 单独出现，而不是 "Xiaofan's
+Pondsage"。主人信息仍然在 INFO 页可见，归属感没丢。
+
+---
+
+## 硬件
+
+固件目标是 ESP32 + Arduino framework。当前实现依赖 M5StickCPlus
+库的显示、IMU、按键驱动——所以你需要这块板，或自己 fork 一份把驱
+动换成自己引脚布局。
+
+## 按键操作
+
+|                       | Normal         | Pet     | Info    | Approval    |
+| --------------------- | -------------- | ------- | ------- | ----------- |
+| **A**（正面）         | 下一屏         | 下一屏  | 下一屏  | **批准**    |
+| **B**（右侧）         | 滚动 transcript | 下一页 | 下一页  | **拒绝**    |
+| **长按 A**            | 菜单           | 菜单    | 菜单    | 菜单        |
+| **电源键短按**（左侧）| 屏幕开关       |         |         |             |
+| **电源键长按 ~6 秒**  | 硬关机         |         |         |             |
+| **晃一晃**            | dizzy          |         |         | —           |
+| **倒扣**              | 小睡（充能）   |         |         |             |
+
+30 秒无交互屏幕自动灭（approval 期间不灭）。任意按键唤醒。
+
+## ASCII 宠物
+
+18 种宠物，每种 7 个状态动画。菜单 → "next pet" 循环切换并显示计数。
+切换持久化到 NVS。编译期默认物种（来自 `my-buddy.json`）只在 NVS
+还没值/被擦掉时生效。
+
+## GIF 宠物
+
+想用自定义 GIF 角色而不是 ASCII buddy，把 character pack 文件夹拖
+进 Hardware Buddy 窗口的拖入区。app 通过 BLE 流式推送过去，stick
+立即切到 GIF 模式。**Settings → delete char** 退回 ASCII 模式。
+
+一个 character pack 是带 `manifest.json` 的文件夹 + 96px 宽 GIF：
+
+```json
+{
+  "name": "bufo",
+  "colors": {
+    "body": "#6B8E23", "bg": "#000000",
+    "text": "#FFFFFF", "textDim": "#808080", "ink": "#000000"
+  },
+  "states": {
+    "sleep": "sleep.gif",
+    "idle": ["idle_0.gif", "idle_1.gif", "idle_2.gif"],
+    "busy": "busy.gif", "attention": "attention.gif",
+    "celebrate": "celebrate.gif", "dizzy": "dizzy.gif", "heart": "heart.gif"
+  }
+}
+```
+
+state 值可以是单文件名或数组（数组在每段循环结束时轮换）。GIF 96px
+宽，高度上限 ~140px 才能在 135×240 竖屏上完整显示。整个文件夹必须
+< 1.8MB——`gifsicle --lossy=80 -O3 --colors 64` 通常能压 40–60%。
+
+`tools/prep_character.py` 处理 GIF 缩放归一化；`tools/flash_character.py
+characters/bufo` 跳过 BLE，把 pack 直接 stage 到 `data/` 走
+`pio run -t uploadfs`。完整示例见 `characters/bufo/`。
+
+---
 
 ## 项目结构
 
 ```
 src/
-  main.cpp       — 主循环、状态机、UI 各屏幕
-  buddy.cpp      — ASCII 物种分发 + 渲染辅助
-  buddies/       — 一个物种一文件，每文件 7 个动画函数
-  ble_bridge.cpp — Nordic UART service，行缓冲收发
-  character.cpp  — GIF 解码 + 渲染
-  data.h         — 协议、JSON 解析
-  xfer.h         — 文件夹推送接收
-  stats.h        — NVS 持久化的 stats、设置、owner、物种选择
-characters/      — 示例 GIF 角色包
+  main.cpp              — 主循环、状态机、UI 屏幕、speech band
+  buddy.cpp             — ASCII 物种调度 + 渲染辅助
+  buddies/              — 一个文件一个物种，每个 7 个动画函数
+  ble_bridge.cpp        — Nordic UART 服务、line-buffered TX/RX
+  character.cpp         — GIF 解码 + 渲染
+  data.h                — 协议解析、JSON parse
+  xfer.h                — 文件夹推送接收 + name/owner/species/statelines 命令
+  stats.h               — NVS-backed stats / settings / 名字 / 物种 / state lines
+  my_buddy_defaults.h   — 构建期生成的编译期默认值
+characters/             — 示例 GIF character packs
 tools/
-  prep_character.py        — 上游：GIF 缩放 / 标准化
-  flash_character.py       — 上游：USB 端角色烧录
-  my-buddy/                — fork：找回你的本命 /buddy
-  enable-hardware-buddy/   — fork：硬件 buddy 菜单不显示时的本地 override
+  prep_character.py        — 上游：GIF 缩放归一化辅助
+  flash_character.py       — 上游：USB-side character staging
+  my-buddy/                — fork：找回 + hatch + 应用本命 buddy
+    compute.js             — 从 accountUuid 算 bones（确定性）
+    my-buddy.json          — 你 hatch 出来的 buddy（事实源）
+    push.js                — 输出 BLE/USB 帧用于运行时下发
+    gen_defaults.py        — 构建期 codegen → src/my_buddy_defaults.h
+  enable-hardware-buddy/   — fork：菜单不显示时的本地 override
 ```
+
+---
 
 ## 本 fork 新增的工具
 
-### [`tools/my-buddy/`](tools/my-buddy/) — 找回你的本命 buddy
+### [`tools/my-buddy/`](tools/my-buddy/)
 
-**背景。** Claude Code 的 `/buddy` 斜杠命令在 2026 年春季上线，大约一个
-月后（2026-04-10 前后）被移除。它存在的那段时间，每个账号都对应一只
-**确定性**生成的伙伴：把 `accountUuid + "friend-2026-401"` 喂给 FNV-1a
-（在 Bun 下是 `Bun.hash`）做 hash，再用结果种子化 mulberry32 PRNG，
-然后按固定顺序从固定列表里抽稀有度 / 物种 / 眼睛 / 帽子 / shiny / 属性。
-**同一个账号永远生成同一只 buddy。** 持久化到磁盘的只有 LLM 生成的
-`name` 和 `personality`，其它每次渲染都从种子重算。
+找回、hatch、编进固件、运行时下发——一只本命 buddy 的全套流程。
+文件清单见上面。
+[工具级 README](tools/my-buddy/README.md) 详细写了 voice rules 和
+offline-hatch protocol，让 name / personality / stateLines 风格能
+和 bones 对齐。
 
-社区项目 [`jrykn/save-buddy`][save-buddy] 把生成器逆向得很完整，并把
-配套的 hooks/MCP/状态栏管线都重写了。本 fork 只移植**生成器本身**到一
-个单文件脚本里，并加了一份"save-buddy 物种顺序 → 固件 SPECIES_TABLE
-顺序"的映射表，方便直接在 M5 stick 上选中。
+### [`tools/enable-hardware-buddy/`](tools/enable-hardware-buddy/)
 
-**怎么找回你自己的：**
-
-```bash
-bun run tools/my-buddy/compute.js
-```
-
-它会从 `~/.claude.json` 读 `oauthAccount.accountUuid`，打印物种、稀有
-度、眼睛、帽子、shiny、属性，以及对应的固件物种 idx。**必须用
-[Bun](https://bun.sh)** 才能拿到 canonical 结果——Node 下会 fall back
-到 FNV-1a，结果仍然是确定性的，但**和 Anthropic 当年给你的不是同一只**。
-
-把物种应用到设备上的两种方式：
-
-- **设备上**——长按 A → 菜单 → "next pet" 按打印出来的次数（默认开机
-  是 idx 0 的 `capybara`）。选择保存到 NVS。
-- **走 BLE**——发 `{"cmd":"species","idx":N}\n` 到 Nordic UART RX
-  characteristic。
-
-**我自己的本命** ([my-buddy.json](tools/my-buddy/my-buddy.json))：
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Species       : DUCK 🦆          (firmware idx 1)
-  Rarity        : common ★
-  Eye           : ◉
-  Hat           : none
-  Shiny         : no
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  DEBUGGING     6   █                ← weakness
-  PATIENCE     18   ███
-  CHAOS        15   ███
-  WISDOM       68   █████████████    ← peak
-  SNARK        44   ████████
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Name: Pondsage
-  "A lakeside contemplative who serves up unreasonably
-   profound life advice in a perfectly flat quack — but
-   watch their eyes glaze the moment a stack trace shows up."
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-一只**贼有智慧但完全不会调试**的瞪眼鸭。原版的 hatching API 也已经下
-线了，所以这只是离线由 Claude Opus 4.7 按原 prompt 的约束（≤12 字符
-单词名、按 rarity 缩放怪异度的一句话人设）补的"灵魂"。
-
-### [`tools/enable-hardware-buddy/`](tools/enable-hardware-buddy/) — 菜单不显示时的本地 override
-
-Claude 桌面端的 "Open Hardware Buddy…" 菜单项受一个 GrowthBook
-feature flag 控制，启动时桌面端会从服务端拉取这个 flag。如果拉取失
-败——最常见的情况是网络路径上有 Cloudflare challenge 拦截（部分 VPN /
-代理用户会遇到），或者你这个账号还没被 enable——菜单就一直不显示，
-即使开了 Developer Mode 也没用。**这是服务端 fetch 问题，不是授权检
-查。**
+"Open Hardware Buddy…" 菜单项被一个 GrowthBook feature flag 卡着，
+flag 是 app 启动时去 fetch 的。如果这个请求失败——最常见是网络
+路径上有 Cloudflare challenge 拦截（部分 VPN/代理用户会遇到），
+或者你这个账号还没被 enable——菜单就一直不显示，即使开了 Developer
+Mode 也没用。**这是服务端 fetch 问题，不是授权检查。**
 
 `enable.py` 把 flag 直接写到 Claude 的本地 feature cache
-（`~/Library/Application Support/Claude/fcache`），相当于代替 GrowthBook
-SDK 给本地写了一个 `{on: true}` 覆盖。完全退出 Claude → 跑脚本 → 重新
-打开，菜单就出来了。完整的注意事项见
-[`tools/enable-hardware-buddy/README.md`](tools/enable-hardware-buddy/README.md)
-——它是非官方 workaround，并不是 Anthropic 认可的路径。
+（`~/Library/Application Support/Claude/fcache`），不碰网络。完全
+退出 Claude → 跑脚本 → 重新打开，菜单就出来了。完整 caveats 见
+[工具级 README](tools/enable-hardware-buddy/README.md)——非官方
+workaround，并不是 Anthropic 认可的路径。
+
+---
 
 ## 路线图 / 在做的事
 
 下面这些是我在断断续续琢磨的，轻量维护、不排期：
 
-- **连上时通过 BLE 自动设置物种。** 现在 stick 默认开机是 capybara，要
-  自己手动 cycle 到本命物种。桥接层完全可以读
-  `tools/my-buddy/my-buddy.json` 然后在连接成功时直接发物种命令。
-- **离线 hatching 工具。** 一个小脚本，拿 bones + inspirationSeed，
-  按原 prompt 的约束让本地 Claude 生成 `{name, personality}`，给那
-  些 hatching API 下线前没来得及 hatch 的账号补一份灵魂（我自己上面
-  那只 Pondsage 就是这么补的）。
-- **定期跟上游同步。** anthropics 那边有什么值得拉的，就
+- **`tools/hatch/`** ——一条命令：传一个 seed（你的 UUID 或任何字
+  符串），先 roll bones，再调 `claude -p`（或 `ANTHROPIC_API_KEY`）
+  hatch 出 name + personality + stateLines，直接写到 `my-buddy.json`。
+  把第 2 步从手动 copy-paste 变成全自动。
+- **连上时通过 BLE 自动下发。** 现在 desktop bridge 不会主动推那些
+  已经被编进固件的字段；这是给"不想重编固件的用户"留的 fallback。
+- **定期 sync upstream。** Anthropic 上游有值得拿过来的改动时
   `git fetch upstream && git merge upstream/main`。
 
-PR 欢迎，不主动征集；这是个个人尺度的 fork。
+欢迎 PR，但不主动征集——这是个个人尺度的 fork。
 
 ## 可用范围
 
-BLE API 只在桌面端开发者模式下可用（**Help → Troubleshooting → Enable
-Developer Mode**），面向 maker 和开发者，**不是官方支持的产品功能。**
+BLE API 只在 Claude Desktop 的开发者模式下可用（**Help →
+Troubleshooting → Enable Developer Mode**）。这功能给 makers 和开
+发者用的，不是官方支持的产品功能。
 
 ## Credits
 
 - **[anthropics/claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy)**
-  ——上游项目。固件、BLE 协议、18 种 ASCII 宠物、GIF 角色系统、
-  Hardware Buddy 窗口都是他们做的。本 fork 原样保留他们的工作，只在
-  上面多加了上面那两个 tools。
-- **[jrykn/save-buddy][save-buddy]**（MIT）——
-  `tools/my-buddy/compute.js` 用的确定性 `/buddy` 生成器（PRNG、hash、
-  常量、抽取顺序）是 save-buddy 算法的单文件移植。该 repo 里的
-  `METHODOLOGY.md` 是原版 `/buddy` feature 唯一权威的取证级参考资料。
+  ——上游项目。固件、BLE 协议、18 个 ASCII 宠物、GIF 角色系统、
+  Hardware Buddy 窗口都是他们的。本 fork 原封保留这些，再加上本命
+  buddy 工具链、设备端 speech band、GrowthBook fcache override。
+- **[jrykn/save-buddy][save-buddy]**（MIT）——确定性 `/buddy` 生成
+  器（PRNG / hash / 常量 / 顺序）的算法，`tools/my-buddy/compute.js`
+  是它的单文件移植。仓库里附带的 `METHODOLOGY.md` 是原版功能最权
+  威的法证级参考。
 
 [save-buddy]: https://github.com/jrykn/save-buddy

@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <Preferences.h>
+#include "my_buddy_defaults.h"   // generated pre-build from tools/my-buddy/my-buddy.json
 
 // Header-only with file-static state: include from exactly one translation
 // unit (main.cpp). Including from a second .cpp produces duplicate symbols.
@@ -218,6 +219,18 @@ inline void petNameLoad() {
   _prefs.getString("petname", _petName, sizeof(_petName));
   _prefs.getString("owner", _ownerName, sizeof(_ownerName));
   _prefs.end();
+  // If NVS still holds the factory default ("Buddy" or empty) AND the
+  // build was generated with a my-buddy.json that names the pet, fall
+  // back to that name so a fresh flash already produces the canonical
+  // buddy without a BLE push. NVS overrides defaults — once the user
+  // pushes a different name, this branch stops firing.
+  #if defined(MY_BUDDY_PETNAME)
+  if ((!_petName[0] || strcmp(_petName, "Buddy") == 0)
+      && MY_BUDDY_PETNAME[0]) {
+    strncpy(_petName, MY_BUDDY_PETNAME, sizeof(_petName) - 1);
+    _petName[sizeof(_petName) - 1] = 0;
+  }
+  #endif
 }
 
 // Strip JSON-breaking chars — these names go into a printf'd JSON string
@@ -254,6 +267,13 @@ inline uint8_t speciesIdxLoad() {
   _prefs.begin("buddy", true);
   uint8_t v = _prefs.getUChar("species", 0xFF);
   _prefs.end();
+  // 0xFF means "user has never set it" (NVS unset). Fall back to the
+  // compiled default so a fresh flash boots into the canonical species.
+  #if defined(MY_BUDDY_SPECIES_IDX)
+  if (v == 0xFF && MY_BUDDY_SPECIES_IDX != 0xFF) {
+    v = MY_BUDDY_SPECIES_IDX;
+  }
+  #endif
   return v;
 }
 
@@ -286,16 +306,41 @@ inline void stateLinesLoad() {
   for (uint8_t i = 0; i < 7; i++) {
     _stateLines[i][0] = 0;
     _prefs.getString(_stateLineKey(i), _stateLines[i], sizeof(_stateLines[i]));
+    // Fall back to compiled default for any state the user hasn't set
+    // a custom line for. Empty default = stay silent for that state.
+    if (!_stateLines[i][0] && MY_BUDDY_STATELINES[i][0]) {
+      strncpy(_stateLines[i], MY_BUDDY_STATELINES[i], sizeof(_stateLines[i]) - 1);
+      _stateLines[i][sizeof(_stateLines[i]) - 1] = 0;
+    }
   }
   _prefs.end();
 }
 
-inline void stateLineSet(uint8_t idx, const char* line) {
+// In-memory write only — no flash commit. Call stateLinesCommit() once
+// after a batch to persist. Splitting these prevents a multi-key BLE
+// frame (statelines cmd) from doing 7 sequential NVS commits inside the
+// BLE rx callback, which holds flash bus + critical sections long
+// enough to starve Bluedroid's osi_thread and trip IWDT on Core 0.
+inline void stateLineSetMem(uint8_t idx, const char* line) {
   if (idx >= 7) return;
   _safeCopy(_stateLines[idx], sizeof(_stateLines[idx]), line ? line : "");
+}
+
+inline void stateLinesCommit(uint8_t mask) {
+  if (!mask) return;
   _prefs.begin("buddy", false);
-  _prefs.putString(_stateLineKey(idx), _stateLines[idx]);
+  for (uint8_t i = 0; i < 7; i++) {
+    if (mask & (1u << i)) _prefs.putString(_stateLineKey(i), _stateLines[i]);
+  }
   _prefs.end();
+}
+
+// Single-key convenience — equivalent to old stateLineSet, kept for any
+// future caller that updates one line at a time.
+inline void stateLineSet(uint8_t idx, const char* line) {
+  if (idx >= 7) return;
+  stateLineSetMem(idx, line);
+  stateLinesCommit(1u << idx);
 }
 
 inline const char* stateLineGet(uint8_t idx) {

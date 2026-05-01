@@ -2,3 +2,7 @@
 .vscode/
 .DS_Store
 data/
+
+# Generated pre-build by tools/my-buddy/gen_defaults.py from
+# tools/my-buddy/my-buddy.json. Always reproducible from sources.
+src/my_buddy_defaults.h

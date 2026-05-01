@@ -957,14 +957,16 @@ void drawHUD() {
   }
 }
 
-// Speech band: between the buddy (y=0..82) and the HUD/approval area
-// (y >= 162). 4 rows × 8px text + padding. Drawn independently of
-// drawHUD — survives both transcript flow and approval prompts. When
-// the line expires we wipe the band once so stale text doesn't ghost.
+// Speech band: between the buddy (y=0..~126 at 2× scale in DISP_NORMAL)
+// and the HUD/approval area (y >= 162 with prompt, y >= 212 without).
+// 3 rows × 8px text + 4px padding = 28px, sitting at y=130..158 with a
+// 2px gap before approval. Drawn independently of drawHUD so it
+// survives both transcript flow and approval prompts. When the line
+// expires we wipe the band once so stale text doesn't ghost.
 void drawSpeech() {
   static bool wasSpeaking = false;
   const Palette& p = characterPalette();
-  const int SY = 88, SH = 36, WRAP = 21;
+  const int SY = 130, SH = 28, WRAP = 21;
 
   bool speaking = speechLine[0] && (int32_t)(speechUntilMs - millis()) > 0;
   if (!speaking) {
@@ -978,8 +980,8 @@ void drawSpeech() {
   spr.fillRect(0, SY, W, SH, p.bg);
   spr.setTextSize(1);
   spr.setTextColor(p.textDim, p.bg);
-  char wrapped[4][24];
-  uint8_t got = wrapInto(speechLine, wrapped, 4, WRAP);
+  char wrapped[3][24];
+  uint8_t got = wrapInto(speechLine, wrapped, 3, WRAP);
   for (uint8_t i = 0; i < got; i++) {
     spr.setCursor(4, SY + 2 + i * 8);
     spr.print(wrapped[i]);
@@ -1094,6 +1096,12 @@ void loop() {
     lastShakeCheck = now;
     if (!menuOpen && !screenOff && checkShake() && (int32_t)(now - oneShotUntil) >= 0) {
       wake();
+      // Yield once after wake() — it touches AXP192 over I2C inside a
+      // critical section. With BLE traffic in flight on Core 0, the
+      // interleaving can starve Bluedroid's osi_thread long enough to
+      // trip the interrupt watchdog. delay(1) gives Core 0 a window to
+      // service its semaphore before we keep going.
+      delay(1);
       triggerOneShot(P_DIZZY, 2000);
       Serial.println("shake: dizzy");
     }
