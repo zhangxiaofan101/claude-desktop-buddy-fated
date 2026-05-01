@@ -46,6 +46,55 @@ originally assigned. Install Bun if you want the canonical answer:
 curl -fsSL https://bun.sh/install | bash
 ```
 
+## Offline-hatch protocol (name, personality, state lines)
+
+`compute.js` only produces the deterministic half of a buddy: `bones`
+(species / rarity / eye / hat / shiny / stats) and `inspirationSeed`. In the
+original Anthropic flow, the client uploaded those bones to a `buddy_react`
+endpoint and the server-side LLM hatched the `name` + `personality` text on
+demand. That endpoint was retired around 2026-04-10, so the narrative half
+now has to be hatched offline by whatever LLM is on hand.
+
+For consistency, anyone (or any model) hatching a buddy into this repo
+should fill **all** of the following fields in `my-buddy.json`:
+
+| field | source | notes |
+|---|---|---|
+| `bones`, `inspirationSeed`, `firmwareIdx` | `compute.js` | deterministic from accountUuid |
+| `name` | offline hatch | one word, ≤12 chars, evocative of bones |
+| `personality` | offline hatch | one short sentence (~12–20 words), shaped by peak/floor stats |
+| `stateLines` | offline hatch | one short line per state in the buddy's voice |
+| `hatchedAt`, `hatchedBy` | offline hatch | ISO date + which model did the hatching |
+
+`stateLines` covers the seven firmware states. Keep each line short (≤8
+words) — they're meant to flash on a 240×135 screen, not to be read like
+prose:
+
+```json
+"stateLines": {
+  "sleep": "...",
+  "idle":  "...",
+  "happy": "...",
+  "sad":   "...",
+  "busy":  "...",
+  "love":  "...",
+  "sick":  "..."
+}
+```
+
+Voice should be driven by stats, not by genre clichés:
+
+- High **WISDOM** + low **DEBUGGING** → contemplative but checked-out at
+  technical detail (Pondsage's flavor).
+- High **CHAOS** → non-sequiturs, broken grammar, energy.
+- High **SNARK** → dry one-liners, side-eye.
+- High **PATIENCE** → measured, slow, gentle.
+- Low floor across the board (`common`) → small life, small lines; resist
+  the urge to write epic legendary energy into a common buddy.
+
+Rarity also caps tone: a `common` buddy should not narrate like a
+`legendary` one. Save the grand vocabulary for buddies that earned it.
+
 ## Credit
 
 Algorithm constants and PRNG implementation are taken from

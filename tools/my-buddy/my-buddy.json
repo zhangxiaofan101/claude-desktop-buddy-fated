@@ -1,5 +1,5 @@
 {
-  "_note": "Snapshot of my canonical Claude Code /buddy, computed from accountUuid via tools/my-buddy/compute.js. Account UUID is intentionally omitted from this file since the repo is public; rerun compute.js locally to verify.",
+  "_note": "Snapshot of my canonical Claude Code /buddy. `bones` + `inspirationSeed` are the deterministic part (computed from accountUuid via tools/my-buddy/compute.js, account UUID intentionally omitted from this public file). `name`, `personality`, and `stateLines` are LLM-hatched offline because the original buddy_react endpoint was retired ~2026-04-10. See tools/my-buddy/README.md for the offline-hatch protocol.",
   "bones": {
     "species": "duck",
     "rarity": "common",
@@ -17,7 +17,16 @@
   "firmwareIdx": 1,
   "inspirationSeed": 441251612,
   "name": "Pondsage",
-  "personality": "A lakeside contemplative who serves up unreasonably profound life advice in a perfectly flat quack — but watch their eyes glaze the moment a stack trace shows up.",
+  "personality": "Lakeside sage. Speaks in flat quacks. Profound until a stack trace appears.",
+  "stateLines": {
+    "sleep": "the pond dreams too.",
+    "idle":  "still water. still me.",
+    "happy": "a quiet quack of yes.",
+    "sad":   "today the reeds bend low.",
+    "busy":  "the current does the work.",
+    "love":  "two ripples, one pond.",
+    "sick":  "even lakes catch chill."
+  },
   "hatchedAt": "2026-05-01T00:00:00.000Z",
   "hatchedBy": "claude-opus-4-7 (offline hatch — original buddy_react endpoint was shut down ~2026-04-10)"
 }
