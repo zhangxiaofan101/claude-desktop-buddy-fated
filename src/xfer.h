@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 #include "ble_bridge.h"
+#include "character.h"   // fsMounted guard
 #include <mbedtls/base64.h>
 #include <ArduinoJson.h>
 
@@ -160,6 +161,16 @@ inline bool xferCommand(JsonDocument& doc) {
   }
 
   if (strcmp(cmd, "char_begin") == 0) {
+    if (!fsMounted) {
+      // Don't pretend to start a transfer if we have no FS to write to.
+      // Without this the openNextFile/mkdir below crash on a stale handle.
+      char b[80];
+      int len = snprintf(b, sizeof(b),
+        "{\"ack\":\"char_begin\",\"ok\":false,\"error\":\"fs not mounted\"}\n");
+      Serial.write(b, len);
+      bleWrite((const uint8_t*)b, len);
+      return true;
+    }
     const char* name = doc["name"] | "pet";
     _xTotal = doc["total"] | 0;
 

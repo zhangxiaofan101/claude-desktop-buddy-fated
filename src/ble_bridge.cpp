@@ -30,6 +30,18 @@ static volatile bool      secure = false;
 static volatile uint32_t  passkey = 0;
 static volatile uint16_t  mtu = 23;
 
+// Event flags posted by Bluedroid callbacks (Core 0) and drained by
+// bleTick() in loop() (Core 1). Keep callbacks branchless and allocation-
+// free — anything else (Serial logging, restartAdvertising) goes through
+// these flags. esp32-arduino BLE is built on Bluedroid; bumping callback
+// runtime starves the Bluedroid task and trips the interrupt watchdog.
+static volatile bool _evtConnect    = false;
+static volatile bool _evtDisconnect = false;
+static volatile bool _evtAuthOk     = false;
+static volatile bool _evtAuthFail   = false;
+static volatile bool _evtPasskey    = false;
+static volatile bool _evtMtu        = false;
+
 static void rxPush(const uint8_t* p, size_t n) {
   for (size_t i = 0; i < n; i++) {
     size_t next = (rxHead + 1) % RX_CAP;
@@ -49,20 +61,18 @@ class RxCallbacks : public BLECharacteristicCallbacks {
 class ServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* s) override {
     connected = true;
-    Serial.println("[ble] connected");
+    _evtConnect = true;
   }
   void onDisconnect(BLEServer* s) override {
     connected = false;
     secure = false;
     passkey = 0;
     mtu = 23;
-    Serial.println("[ble] disconnected");
-    // Restart advertising so the next client can find us.
-    BLEDevice::startAdvertising();
+    _evtDisconnect = true;   // bleTick() restarts advertising on Core 1
   }
   void onMtuChanged(BLEServer*, esp_ble_gatts_cb_param_t* param) override {
     mtu = param->mtu.mtu;
-    Serial.printf("[ble] mtu=%u\n", mtu);
+    _evtMtu = true;
   }
 };
 
@@ -76,20 +86,28 @@ class SecCallbacks : public BLESecurityCallbacks {
   bool onSecurityRequest() override { return true; }
   void onPassKeyNotify(uint32_t pk) override {
     passkey = pk;
-    Serial.printf("[ble] passkey %06lu\n", (unsigned long)pk);
+    _evtPasskey = true;
   }
   void onAuthenticationComplete(esp_ble_auth_cmpl_t cmpl) override {
     passkey = 0;
     secure = cmpl.success;
-    Serial.printf("[ble] auth %s\n", cmpl.success ? "ok" : "FAIL");
+    if (cmpl.success) _evtAuthOk = true;
+    else              _evtAuthFail = true;
+    // Disconnect on auth failure stays here — it's a quick BLE API call
+    // and waiting for loop() would let an unauthenticated peer hold the
+    // link. server->disconnect() just queues a host event; safe in cb.
     if (!cmpl.success && server) server->disconnect(server->getConnId());
   }
 };
 
 void bleInit(const char* deviceName) {
   BLEDevice::init(deviceName);
-  // Request the biggest MTU we can get. macOS negotiates to 185 typically.
-  BLEDevice::setMTU(517);
+  // We used to request 517 to match BLE 5 max. On M5StickC Plus + macOS +
+  // Bluedroid + encrypted link that pushes BT-task pressure noticeably and
+  // correlated with IWDT resets in the field. macOS's natural negotiated
+  // MTU is around 185, so cap there. Our notifies are JSON ≤ ~250B and
+  // the bleWrite() path already chunks, so this isn't a throughput hit.
+  BLEDevice::setMTU(185);
 
   BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT_MITM);
   BLEDevice::setSecurityCallbacks(new SecCallbacks());
@@ -108,9 +126,14 @@ void bleInit(const char* deviceName) {
   cccd->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED);
   txChar->addDescriptor(cccd);
 
+  // WRITE only — no WRITE_NR. Write-without-response lets the central
+  // fire commands faster than the GATT server can process them, and the
+  // resulting backlog inside Bluedroid is a known IWDT trigger when the
+  // foreground is also doing flash work. The bridge sends one JSON line
+  // at a time and waits for an ack anyway, so WRITE (acked) is correct.
   rxChar = svc->createCharacteristic(
     NUS_RX_UUID,
-    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
+    BLECharacteristic::PROPERTY_WRITE
   );
   rxChar->setAccessPermissions(ESP_GATT_PERM_WRITE_ENCRYPTED);
   rxChar->setCallbacks(new RxCallbacks());
@@ -127,10 +150,32 @@ void bleInit(const char* deviceName) {
   BLEAdvertising* adv = BLEDevice::getAdvertising();
   adv->addServiceUUID(NUS_SERVICE_UUID);
   adv->setScanResponse(true);
-  adv->setMinPreferred(0x06);   // iOS-friendly connection interval
-  adv->setMaxPreferred(0x12);
+  // Connection interval in 1.25ms units. The old 0x06..0x12 (7.5..22.5ms)
+  // was Apple's "iOS friendly" range but it keeps the radio hot and feeds
+  // BT-task pressure. 0x18..0x28 (30..50ms) is plenty for an approval-
+  // chat workload (one write per few seconds) and gives Bluedroid more
+  // breathing room between events.
+  adv->setMinPreferred(0x18);
+  adv->setMaxPreferred(0x28);
   BLEDevice::startAdvertising();
   Serial.printf("[ble] advertising as '%s'\n", deviceName);
+}
+
+// Pump deferred BLE callback work. Called from loop() on Core 1, so flash
+// writes / Serial / startAdvertising here don't starve the Bluedroid task.
+void bleTick() {
+  if (_evtConnect)    { _evtConnect = false;    Serial.println("[ble] connected"); }
+  if (_evtAuthOk)     { _evtAuthOk = false;     Serial.println("[ble] auth ok"); }
+  if (_evtAuthFail)   { _evtAuthFail = false;   Serial.println("[ble] auth FAIL"); }
+  if (_evtPasskey)    { _evtPasskey = false;
+                        Serial.printf("[ble] passkey %06lu\n", (unsigned long)passkey); }
+  if (_evtMtu)        { _evtMtu = false;        Serial.printf("[ble] mtu=%u\n", mtu); }
+  if (_evtDisconnect) {
+    _evtDisconnect = false;
+    Serial.println("[ble] disconnected");
+    // Re-arm advertising on Core 1 instead of inside the disconnect cb.
+    BLEDevice::startAdvertising();
+  }
 }
 
 bool bleConnected() { return connected; }

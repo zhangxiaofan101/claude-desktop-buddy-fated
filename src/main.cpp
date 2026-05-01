@@ -1051,6 +1051,7 @@ void loop() {
   t++;
   uint32_t now = millis();
 
+  bleTick();         // drain Bluedroid callback events on Core 1
   dataPoll(&tama);
   if (statsPollLevelUp()) triggerOneShot(P_CELEBRATE, 3000);
   baseState = derive(tama);
@@ -1128,6 +1129,11 @@ void loop() {
   }
 
   bool inPrompt = tama.promptId[0] && !responseSent;
+
+  // Drain deferred NVS writes while the device is idle. Keeps flash erase
+  // cycles out of button handlers / BLE notify paths where they would
+  // otherwise hold IRQs off long enough to trip IWDT.
+  statsTick(inPrompt);
 
   // Button-press wake. Track which button woke the screen so its full
   // press cycle (including long-press) is swallowed — you don't want

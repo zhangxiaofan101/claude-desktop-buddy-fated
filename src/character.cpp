@@ -137,12 +137,31 @@ static void gifDrawCb(GIFDRAW* d) {
 
 // --- Public -------------------------------------------------------------
 
+// Tracks whether LittleFS is currently mounted. xfer.h status / file
+// commands check this before touching the FS — every recent boot in the
+// monitor log shows "Corrupted dir pair at {0x1, 0x0}" and the first
+// mount fails, so without a guard subsequent operations would crash on
+// an unmounted FS. Set true only after a successful begin().
+bool fsMounted = false;
+
 bool characterInit(const char* name) {
-  if (!LittleFS.begin(false)) {
-    // begin() fails if already mounted — that's fine on reload
-    if (!LittleFS.open("/")) {
-      Serial.println("[char] LittleFS mount failed");
-      return false;
+  if (!fsMounted) {
+    // Try mount without auto-format first. If that fails, the partition
+    // is corrupted (we see this every boot in the wild — partition table
+    // gets scribbled by a mid-write reboot). Format once and retry.
+    // Without this we'd run with no FS and every subsequent xfer / status
+    // call would hit a stale handle.
+    if (LittleFS.begin(false)) {
+      fsMounted = true;
+    } else {
+      Serial.println("[char] LittleFS mount failed, formatting...");
+      if (LittleFS.begin(true)) {
+        Serial.println("[char] LittleFS reformatted");
+        fsMounted = true;
+      } else {
+        Serial.println("[char] LittleFS unrecoverable");
+        return false;
+      }
     }
   }
 

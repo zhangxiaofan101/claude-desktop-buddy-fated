@@ -9,6 +9,12 @@ struct Palette {
 // /characters/<name>/manifest.json, parses colors, caches GIF paths.
 bool characterInit(const char* name);
 bool characterLoaded();
+// True once LittleFS is mounted. characterInit() auto-formats and
+// re-mounts on first failure (the partition routinely shows up
+// "Corrupted dir pair" after a mid-write reset), then sets this.
+// xfer.h gates file/status paths on it so commands sent before mount
+// completed don't hit a stale handle.
+extern bool fsMounted;
 
 // 0..6: sleep, idle, busy, attention, celebrate, dizzy, heart.
 // Closes current GIF, opens the one for this state. No-op if same state.

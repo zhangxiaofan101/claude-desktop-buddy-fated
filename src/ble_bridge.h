@@ -30,3 +30,10 @@ void bleClearBonds();
 size_t bleAvailable();
 int bleRead();
 size_t bleWrite(const uint8_t* data, size_t len);
+
+// Pump deferred work out of BLE callbacks: connect/disconnect Serial logs,
+// passkey/auth notifications, and re-arming advertising after a disconnect.
+// Bluedroid invokes the callbacks on its own task on Core 0; doing
+// Serial.println / startAdvertising in there can starve the task long
+// enough to trip IWDT under flash-erase pressure. Call this every loop().
+void bleTick();

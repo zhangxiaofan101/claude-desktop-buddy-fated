@@ -27,6 +27,16 @@ static Stats _stats;
 static Preferences _prefs;
 static bool _dirty = false;
 
+// statsSave() does ~8 sequential NVS putXxx calls. Each can trigger a flash
+// sector erase (~25-80ms with IRQs disabled). On Core 1 inside a BtnA handler
+// while Bluedroid is servicing GATT notifies on Core 0, three back-to-back
+// approvals are enough to overrun the 300ms interrupt watchdog and silently
+// reboot. The fix: never flash-write from the foreground event handler. Mark
+// dirty, let statsTick() commit when the device is quiet — no live prompt
+// and a couple of seconds since the last input.
+static uint32_t _dirtySinceMs = 0;
+static uint32_t _lastFlushMs  = 0;
+
 inline void statsLoad() {
   _prefs.begin("buddy", true);
   _stats.napSeconds = _prefs.getUInt("nap", 0);
@@ -61,13 +71,19 @@ inline void statsSave() {
   _dirty = false;
 }
 
+inline void _markDirty() {
+  if (!_dirty) _dirtySinceMs = millis();
+  _dirty = true;
+}
+
 // Level is token-driven now; approvals only feed mood/velocity.
+// NB: no statsSave() here on purpose — see _dirtySinceMs comment above.
 inline void statsOnApproval(uint32_t secondsToRespond) {
   _stats.approvals++;
   _stats.velocity[_stats.velIdx] = (uint16_t)min(secondsToRespond, 65535u);
   _stats.velIdx = (_stats.velIdx + 1) % 8;
   if (_stats.velCount < 8) _stats.velCount++;
-  _dirty = true; statsSave();
+  _markDirty();
 }
 
 // Tokens feed the pet. 50K per level, 5K per pip on the fed bar.
@@ -105,7 +121,7 @@ inline void statsOnBridgeTokens(uint32_t bridgeTotal) {
   if (lvlAfter > lvlBefore) {
     _stats.level = lvlAfter;
     _levelUpPending = true;
-    _dirty = true; statsSave();
+    _markDirty();
   }
 }
 
@@ -115,13 +131,27 @@ inline bool statsPollLevelUp() {
   return r;
 }
 
-inline void statsOnDenial() { _stats.denials++; _dirty = true; statsSave(); }
+inline void statsOnDenial() { _stats.denials++; _markDirty(); }
 
-inline void statsMarkDirty() { _dirty = true; }
+inline void statsMarkDirty() { _markDirty(); }
 
 inline void statsOnNapEnd(uint32_t seconds) {
   _stats.napSeconds += seconds;
-  _dirty = true; statsSave();
+  _markDirty();
+}
+
+// Call once per loop. Flushes pending NVS writes when the device is quiet:
+//   - dirty for at least 1.5s (let approval bursts settle)
+//   - last flush at least 5s ago (don't churn flash on rapid changes)
+// Returning fast (single comparison) when nothing to do is the common case.
+inline void statsTick(bool inPrompt) {
+  if (!_dirty) return;
+  uint32_t now = millis();
+  if (inPrompt) return;                      // never write while prompt is up
+  if (now - _dirtySinceMs < 1500) return;
+  if (now - _lastFlushMs   < 5000) return;
+  statsSave();
+  _lastFlushMs = now;
 }
 
 // Median of the velocity ring buffer. 0 if empty.
