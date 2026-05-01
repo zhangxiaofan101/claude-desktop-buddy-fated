@@ -991,7 +991,6 @@ void drawSpeech() {
 }
 
 void setup() {
-  M5.begin();
   // ── IWDT root-cause workaround ─────────────────────────────────────
   // The interrupt watchdog kept tripping with EPC1 in uart_hal_write_txfifo
   // and PC in spinlock_acquire — Bluedroid (Core 0) was holding the UART
@@ -1007,17 +1006,19 @@ void setup() {
   //    see those messages anyway and they were a contributor to the FIFO
   //    pressure.
   //
-  // M5.begin() already called Serial.begin(115200); we re-init the driver
-  // with a TX buffer. Order: end → setTxBufferSize → begin.
-  Serial.end();
-  Serial.setTxBufferSize(4096);
-  Serial.begin(115200);
+  // Install these before M5.begin(): the M5 library prints a boot banner
+  // and triggers ESP_LOG output while initializing LEDC. If we resize the
+  // UART after that, we still expose the no-buffer TX path during boot and
+  // can cut an in-flight line by calling Serial.end().
   esp_log_level_set("*", ESP_LOG_NONE);
   // Belt + suspenders: level_set only filters tag-based ESP_LOGx. The
   // Bluedroid component still has paths that go straight to the vprintf
   // hook (raw printf, lwip-style traces). Replacing the hook with a
   // nop drops everything before it can hit the UART driver.
   esp_log_set_vprintf([](const char*, va_list) -> int { return 0; });
+  Serial.setTxBufferSize(4096);
+  Serial.begin(115200);
+  M5.begin(true, true, false);
   M5.Lcd.setRotation(0);
   M5.Imu.Init();
   M5.Beep.begin();
