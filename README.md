@@ -1,20 +1,38 @@
-# claude-desktop-buddy
+# claude-desktop-buddy-fated
+
+**English** · [简体中文](README.zh.md)
+
+> **Fork of [anthropics/claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy).**
+> Original hardware-buddy firmware preserved as-is; this fork adds tooling
+> to recover the **canonical (account-bound, "fated") `/buddy`** that
+> Anthropic's Claude Code shipped briefly in early 2026 and then removed,
+> and a small workaround for getting the Hardware Buddy menu to appear
+> when the feature flag fetch is blocked.
 
 Claude for macOS and Windows can connect Claude Cowork and Claude Code to
 maker devices over BLE, so developers and makers can build hardware that
-displays permission prompts, recent messages, and other interactions. We've
-been impressed by the creativity of the maker community around Claude -
-providing a lightweight, opt-in API is our way of making it easier to build
-fun little hardware devices that integrate with Claude.
+displays permission prompts, recent messages, and other interactions. The
+upstream project ships an ESP32 desk-pet firmware as the reference
+implementation, with eighteen ASCII pets you can cycle through.
+
+This fork's small extra: each Claude Code account once had a **canonical
+buddy** — a deterministic `{species, rarity, eye, hat, stats, name,
+personality}` derived from the account UUID. The `/buddy` command that
+exposed it was removed from Claude Code around 2026-04-10, but the
+generator was reverse-engineered by [`jrykn/save-buddy`][save-buddy], so
+the assignment is recoverable. `tools/my-buddy/` reproduces it offline
+and maps the species into the firmware's pet ordering, so you can pick
+your fated pet on the actual stick.
 
 > **Building your own device?** You don't need any of the code here. See
 > **[REFERENCE.md](REFERENCE.md)** for the wire protocol: Nordic UART
 > Service UUIDs, JSON schemas, and the folder push transport.
 
-As an example, we built a desk pet on ESP32 that lives off permission
-approvals and interaction with Claude. It sleeps when nothing's happening,
-wakes when sessions start, gets visibly impatient when an approval prompt is
-waiting, and lets you approve or deny right from the device.
+As an example, the upstream repo built a desk pet on ESP32 that lives off
+permission approvals and interaction with Claude. It sleeps when nothing's
+happening, wakes when sessions start, gets visibly impatient when an
+approval prompt is waiting, and lets you approve or deny right from the
+device.
 
 <p align="center">
   <img src="docs/device.jpg" alt="M5StickC Plus running the buddy firmware" width="500">
@@ -60,6 +78,11 @@ first connect; grant it.
 </p>
 
 Once paired, the bridge auto-reconnects whenever both sides are awake.
+
+> **"Open Hardware Buddy…" not showing up even after enabling Developer
+> Mode?** That's a known issue when the GrowthBook flag fetch is blocked
+> on your network. See **[`tools/enable-hardware-buddy/`](tools/enable-hardware-buddy/)**
+> for a local-override workaround.
 
 If discovery isn't finding the stick:
 
@@ -162,11 +185,135 @@ src/
   xfer.h         — folder push receiver
   stats.h        — NVS-backed stats, settings, owner, species choice
 characters/      — example GIF character packs
-tools/           — generators and converters
+tools/
+  prep_character.py        — upstream: GIF resize/normalize helper
+  flash_character.py       — upstream: USB-side character staging
+  my-buddy/                — fork: recover your canonical /buddy
+  enable-hardware-buddy/   — fork: local override when the menu won't appear
 ```
+
+## Tools added in this fork
+
+### [`tools/my-buddy/`](tools/my-buddy/) — recover your fated buddy
+
+**Background.** Claude Code's `/buddy` slash command shipped in spring
+2026 and was removed roughly a month later (around 2026-04-10). While it
+existed, every account got a deterministic companion: feed
+`accountUuid + "friend-2026-401"` through FNV-1a (or `Bun.hash` under
+Bun) into a mulberry32 PRNG, then draw rarity / species / eye / hat /
+shiny / stats from fixed lists in a fixed order. The same account always
+produced the same buddy. Only the AI-generated `name` and `personality`
+were persisted — everything else was recomputed from the seed every
+render.
+
+The community project [`jrykn/save-buddy`][save-buddy] reverse-engineered
+the generator faithfully and reimplemented the surrounding plumbing as
+hooks/MCP. This fork ports just the deterministic generator into a
+single-file script, plus a mapping into the firmware's `SPECIES_TABLE`
+order so the result is directly actionable on the M5 stick.
+
+**Recovering yours.**
+
+```bash
+bun run tools/my-buddy/compute.js
+```
+
+Reads `oauthAccount.accountUuid` from `~/.claude.json`, prints species,
+rarity, eye, hat, shiny, stats, and the firmware species index.
+[Bun](https://bun.sh) is required for canonical results — under Node it
+falls back to FNV-1a and you'll get a *different* deterministic buddy
+than the one Anthropic actually assigned. Two ways to apply the species
+on the device:
+
+- **On the device** — long-press A → menu → "next pet" the printed
+  number of times (default boot is `capybara` at idx 0). NVS-persisted.
+- **Over BLE** — send `{"cmd":"species","idx":N}\n` to the Nordic UART
+  RX characteristic.
+
+**Mine, for example** ([my-buddy.json](tools/my-buddy/my-buddy.json)):
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Species       : DUCK 🦆          (firmware idx 1)
+  Rarity        : common ★
+  Eye           : ◉
+  Hat           : none
+  Shiny         : no
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  DEBUGGING     6   █                ← weakness
+  PATIENCE     18   ███
+  CHAOS        15   ███
+  WISDOM       68   █████████████    ← peak
+  SNARK        44   ████████
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Name: Pondsage
+  "A lakeside contemplative who serves up unreasonably
+   profound life advice in a perfectly flat quack — but
+   watch their eyes glaze the moment a stack trace shows up."
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+A philosopher duck who can't debug to save his life. Hatched offline by
+Claude Opus 4.7 since the original hatching API is also gone — same
+constraints as the original prompt (≤12-char one-word name, one-sentence
+personality scaled by rarity).
+
+### [`tools/enable-hardware-buddy/`](tools/enable-hardware-buddy/) — Hardware Buddy menu workaround
+
+The "Open Hardware Buddy…" menu item in Claude Desktop is gated by a
+GrowthBook feature flag that the app fetches at startup. If the fetch
+fails — most commonly because a Cloudflare challenge is interposed on
+your network path (some VPN/proxy users hit this), or the flag simply
+isn't enabled for your account yet — the menu item never appears, even
+with Developer Mode on. It's a server-fetch issue, not a license check.
+
+`enable.py` writes the flag into Claude's local feature cache
+(`~/Library/Application Support/Claude/fcache`) so the menu item shows up
+without touching the proxy or anything else in Claude. Fully quit Claude
+first, run the script, reopen — the menu appears. See
+[`tools/enable-hardware-buddy/README.md`](tools/enable-hardware-buddy/README.md)
+for the full caveats; it's an unofficial workaround, not endorsed by
+Anthropic.
+
+## Roadmap / WIP
+
+Things I'm poking at, lightly maintained, no schedule:
+
+- **Auto-set species over BLE on connect.** Today the stick boots into
+  capybara and you cycle to your fated species manually. The bridge
+  could read `tools/my-buddy/my-buddy.json` and send the species command
+  on connect.
+- **Render the personality on-device.** The `attention`/`celebrate`
+  states currently use generic strings; substituting your buddy's
+  `personality` into the speech bubble would make the stick feel more
+  like *yours*.
+- **Offline hatching helper.** A small script that takes bones +
+  inspiration seed and asks a local Claude to generate
+  `{name, personality}` in the original prompt format, for accounts that
+  never got hatched before the API was shut down. (My own buddy was
+  hatched this way — see Pondsage above.)
+- **Sync from upstream periodically.** `git fetch upstream && git merge
+  upstream/main` whenever anthropics ships changes worth pulling.
+
+PRs welcome but not actively solicited; this is a personal-scale fork.
 
 ## Availability
 
 The BLE API is only available when the desktop apps are in developer mode
 (**Help → Troubleshooting → Enable Developer Mode**). It's intended for
 makers and developers and isn't an officially supported product feature.
+
+## Credits
+
+- **[anthropics/claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy)**
+  — the upstream project. Firmware, BLE protocol, all eighteen ASCII
+  pets, the GIF character system, and the Hardware Buddy window are all
+  theirs. This fork preserves their work as-is and only adds the two
+  tools above.
+- **[jrykn/save-buddy][save-buddy]** (MIT) — the deterministic `/buddy`
+  generator (PRNG, hash, constants, ordering) used by
+  `tools/my-buddy/compute.js` is a single-file port of save-buddy's
+  algorithm. The accompanying `METHODOLOGY.md` in that repo is the
+  authoritative forensic reference for the original feature.
+
+[save-buddy]: https://github.com/jrykn/save-buddy
