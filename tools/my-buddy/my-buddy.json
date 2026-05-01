@@ -18,6 +18,7 @@
   "inspirationSeed": 831425141,
   "name": "Cogito",
   "personality": "Reads the room before it knows it's been read; offers wisdom after a calibrated, faintly amused pause.",
+  "personalityShort": "Tophat stoic with a dry footnote.",
   "stateLines": {
     "sleep":     "defragmenting the subconscious.",
     "idle":      "watching the cursor breathe.",
