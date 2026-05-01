@@ -1350,5 +1350,25 @@ void loop() {
     screenOff = true;
   }
 
+  // Heartbeat — once every 5s print machine state to serial. Cheap
+  // (one printf, four reads) and exactly the breadcrumbs we need to
+  // tell what the device was doing right before a silent IWDT reset:
+  // heap drift = leak, ble flap = link instability, state at moment
+  // of reset = which code path was last alive.
+  static uint32_t hbMs = 0;
+  if (millis() - hbMs >= 5000) {
+    hbMs = millis();
+    Serial.printf(
+      "[hb] t=%lus heap=%u ble=%s scr=%s prompt=%c state=%s spec=%u\n",
+      (unsigned long)(millis() / 1000),
+      (unsigned)ESP.getFreeHeap(),
+      bleSecure() ? "sec" : (dataBtActive() ? "act" : "idle"),
+      screenOff ? "off" : "on",
+      tama.promptId[0] ? 'Y' : 'n',
+      stateNames[activeState],
+      (unsigned)buddySpeciesIdx()
+    );
+  }
+
   delay(screenOff ? 100 : 16);
 }
