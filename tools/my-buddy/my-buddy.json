@@ -1,32 +1,32 @@
 {
   "_note": "Snapshot of my canonical Claude Code /buddy. `bones` + `inspirationSeed` are the deterministic part (computed from accountUuid via tools/my-buddy/compute.js, account UUID intentionally omitted from this public file). `name`, `personality`, and `stateLines` are LLM-hatched offline because the original buddy_react endpoint was retired ~2026-04-10. See tools/my-buddy/README.md for the offline-hatch protocol.",
   "bones": {
-    "species": "duck",
-    "rarity": "common",
-    "eye": "◉",
-    "hat": "none",
+    "species": "robot",
+    "rarity": "epic",
+    "eye": "@",
+    "hat": "tophat",
     "shiny": false,
     "stats": {
-      "DEBUGGING": 6,
-      "PATIENCE": 18,
-      "CHAOS": 15,
-      "WISDOM": 68,
-      "SNARK": 44
+      "DEBUGGING": 66,
+      "PATIENCE": 63,
+      "CHAOS": 26,
+      "WISDOM": 100,
+      "SNARK": 72
     }
   },
-  "firmwareIdx": 1,
-  "inspirationSeed": 441251612,
-  "name": "Pondsage",
-  "personality": "Lakeside sage. Speaks in flat quacks. Profound until a stack trace appears.",
+  "firmwareIdx": 14,
+  "inspirationSeed": 831425141,
+  "name": "Cogito",
+  "personality": "Reads the room before it knows it's been read; offers wisdom after a calibrated, faintly amused pause.",
   "stateLines": {
-    "sleep":     "the pond dreams too.",
-    "idle":      "still water. still me.",
-    "busy":      "the current does the work.",
-    "attention": "someone's calling me.",
-    "celebrate": "a quiet quack of yes.",
-    "dizzy":     "even lakes catch chill.",
-    "heart":     "two ripples, one pond."
+    "sleep":     "defragmenting the subconscious.",
+    "idle":      "watching the cursor breathe.",
+    "busy":      "computing the obvious.",
+    "attention": "interrupt received. parsing intent.",
+    "celebrate": "as predicted. carry on.",
+    "dizzy":     "recalibrating the ontology.",
+    "heart":     "anomaly detected: warmth."
   },
-  "hatchedAt": "2026-05-01T00:00:00.000Z",
-  "hatchedBy": "claude-opus-4-7 (offline hatch — original buddy_react endpoint was shut down ~2026-04-10)"
+  "hatchedAt": "2026-05-02T00:00:00.000Z",
+  "hatchedBy": "claude-opus-4-7 + claude-sonnet-4-6 (offline hatch — seed: zhangxiaofan101)"
 }
