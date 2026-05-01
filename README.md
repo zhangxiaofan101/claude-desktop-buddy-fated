@@ -96,9 +96,17 @@ checked-out energy; `common` rarity should not narrate like a
 *Offline-hatch protocol*. Keep each `stateLine` short — they flash on a
 135×240 portrait screen, not a paragraph.
 
-A WIP `tools/hatch/` is on the roadmap to do this step automatically by
-calling `claude -p` on the bones. Until then it's a copy-paste round
-trip with whatever LLM you prefer.
+Or skip the manual round-trip and let
+[`tools/hatch/`](tools/hatch/) do it for you:
+
+```bash
+bun run tools/hatch/hatch.js <seed> --write
+```
+
+Rolls bones, calls `claude -p` with the hatch prompt, parses the
+response, and writes the full result straight to `my-buddy.json`. Try
+random strings to see what other buddies you might have rolled — just
+don't `--write` over your real one.
 
 ### 3. Flash the firmware
 
@@ -343,10 +351,13 @@ tools/
   prep_character.py        — upstream: GIF resize/normalize helper
   flash_character.py       — upstream: USB-side character staging
   my-buddy/                — fork: recover & hatch your fated buddy
+    lib.js                 — shared roll algorithm (constants, PRNG, hashString)
     compute.js             — bones from accountUuid (deterministic)
-    my-buddy.json          — your hatched buddy (sources of truth)
+    my-buddy.json          — your hatched buddy (source of truth)
     push.js                — emit BLE/USB frames to apply at runtime
     gen_defaults.py        — pre-build codegen → src/my_buddy_defaults.h
+  hatch/                   — fork: any-seed → bones → LLM hatch
+    hatch.js               — calls claude -p, writes my-buddy.json
   enable-hardware-buddy/   — fork: local override when the menu won't appear
 ```
 
@@ -360,6 +371,13 @@ Recover, hatch, bake-in, and push a fated buddy. Files documented
 above; the [tool-level README](tools/my-buddy/README.md) details the
 voice rules and the offline-hatch protocol that keeps name/personality/
 state lines stylistically aligned with the bones.
+
+### [`tools/hatch/`](tools/hatch/)
+
+One-shot CLI: any seed → bones → LLM call → name + personality + seven
+state lines, optionally writing straight to `my-buddy.json` so
+the next flash bakes it into the firmware. Auto-detects `claude` on
+PATH; falls back to printing the prompt for manual use.
 
 ### [`tools/enable-hardware-buddy/`](tools/enable-hardware-buddy/)
 
@@ -383,11 +401,6 @@ caveats; it's an unofficial workaround, not endorsed by Anthropic.
 
 Things I'm poking at, lightly maintained, no schedule:
 
-- **`tools/hatch/`** — one-shot CLI that takes a seed (your UUID, or
-  any string), rolls bones, and shells out to `claude -p` (or
-  `ANTHROPIC_API_KEY`) to hatch name + personality + state lines in
-  one go, writing straight to `my-buddy.json`. Removes the manual
-  copy-paste in step 2.
 - **Auto-set species over BLE on connect.** Today the desktop bridge
   doesn't push anything that the firmware now bakes in; this would be
   a fallback for users who don't want to recompile.
