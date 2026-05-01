@@ -1,0 +1,23 @@
+{
+  "_note": "Snapshot of my canonical Claude Code /buddy, computed from accountUuid via tools/my-buddy/compute.js. Account UUID is intentionally omitted from this file since the repo is public; rerun compute.js locally to verify.",
+  "bones": {
+    "species": "duck",
+    "rarity": "common",
+    "eye": "◉",
+    "hat": "none",
+    "shiny": false,
+    "stats": {
+      "DEBUGGING": 6,
+      "PATIENCE": 18,
+      "CHAOS": 15,
+      "WISDOM": 68,
+      "SNARK": 44
+    }
+  },
+  "firmwareIdx": 1,
+  "inspirationSeed": 441251612,
+  "name": "Pondsage",
+  "personality": "A lakeside contemplative who serves up unreasonably profound life advice in a perfectly flat quack — but watch their eyes glaze the moment a stack trace shows up.",
+  "hatchedAt": "2026-05-01T00:00:00.000Z",
+  "hatchedBy": "claude-opus-4-7 (offline hatch — original buddy_react endpoint was shut down ~2026-04-10)"
+}
