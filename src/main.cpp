@@ -920,22 +920,9 @@ void drawHUD() {
   if (tama.lineGen != lastLineGen) { msgScroll = 0; lastLineGen = tama.lineGen; wake(); }
 
   if (tama.nLines == 0) {
-    // Speech overlay takes precedence over the static msg when active —
-    // the pet "saying something" beats the placeholder ("No Claude
-    // connected" / etc). Wraps to up to 3 rows.
-    bool speaking = speechLine[0] && (int32_t)(speechUntilMs - millis()) > 0;
     spr.setTextColor(p.text, p.bg);
-    if (speaking) {
-      char wrapped[3][24];
-      uint8_t got = wrapInto(speechLine, wrapped, 3, WIDTH);
-      for (uint8_t i = 0; i < got; i++) {
-        spr.setCursor(4, H - AREA + 2 + i * LH);
-        spr.print(wrapped[i]);
-      }
-    } else {
-      spr.setCursor(4, H - LH - 2);
-      spr.print(tama.msg);
-    }
+    spr.setCursor(4, H - LH - 2);
+    spr.print(tama.msg);
     return;
   }
 
@@ -968,6 +955,36 @@ void drawHUD() {
     spr.setCursor(W - 18, H - LH - 2);
     spr.printf("-%u", msgScroll);
   }
+}
+
+// Speech band: between the buddy (y=0..82) and the HUD/approval area
+// (y >= 162). 4 rows × 8px text + padding. Drawn independently of
+// drawHUD — survives both transcript flow and approval prompts. When
+// the line expires we wipe the band once so stale text doesn't ghost.
+void drawSpeech() {
+  static bool wasSpeaking = false;
+  const Palette& p = characterPalette();
+  const int SY = 88, SH = 36, WRAP = 21;
+
+  bool speaking = speechLine[0] && (int32_t)(speechUntilMs - millis()) > 0;
+  if (!speaking) {
+    if (wasSpeaking) {
+      spr.fillRect(0, SY, W, SH, p.bg);
+      wasSpeaking = false;
+    }
+    return;
+  }
+
+  spr.fillRect(0, SY, W, SH, p.bg);
+  spr.setTextSize(1);
+  spr.setTextColor(p.textDim, p.bg);
+  char wrapped[4][24];
+  uint8_t got = wrapInto(speechLine, wrapped, 4, WRAP);
+  for (uint8_t i = 0; i < got; i++) {
+    spr.setCursor(4, SY + 2 + i * 8);
+    spr.print(wrapped[i]);
+  }
+  wasSpeaking = true;
 }
 
 void setup() {
@@ -1043,13 +1060,14 @@ void loop() {
   if ((int32_t)(now - oneShotUntil) >= 0) activeState = baseState;
 
   // State-line hook: on transition into a new state, show that state's
-  // personality line in the HUD. Throttle per-state so idle↔sleep churn
-  // doesn't make the pet a chatterbox. No line set for that state? Stay
-  // silent. Don't speak while a permission prompt is active — that screen
-  // already commands the bottom region.
+  // personality line in the speech band above the HUD. Throttle per-state
+  // so idle↔sleep churn doesn't make the pet a chatterbox. No line set
+  // for that state? Stay silent. Speech band sits above the approval
+  // card, so we *do* want to speak on entering attention — the pet
+  // noticing the prompt is exactly the moment it should chime in.
   {
     static PersonaState prevSpokenState = (PersonaState)0xFF;
-    if (activeState != prevSpokenState && !tama.promptId[0]) {
+    if (activeState != prevSpokenState) {
       uint8_t i = (uint8_t)activeState;
       if (i < 7
           && (stateLineLastMs[i] == 0
@@ -1285,7 +1303,7 @@ void loop() {
     else if (clocking) drawClock();
     else if (displayMode == DISP_INFO) drawInfo();
     else if (displayMode == DISP_PET) drawPet();
-    else if (settings().hud) drawHUD();
+    else if (settings().hud) { drawHUD(); drawSpeech(); }
     if (resetOpen) drawReset();
     else if (settingsOpen) drawSettings();
     else if (menuOpen) drawMenu();

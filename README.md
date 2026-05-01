@@ -172,6 +172,57 @@ If you're iterating on a character and would rather skip the BLE round-trip,
 | `dizzy`     | you shook the stick         | spiral eyes, wobbling       |
 | `heart`     | approved in under 5s        | floating hearts             |
 
+## Seven voices (this fork)
+
+Each fated buddy gets its own short line for every one of the seven
+states, in its own voice. Lines are persisted to NVS and flashed in a
+band between the pet and the HUD/approval card for ~4.5 s on every
+state change — surviving both transcript flow and approval prompts so
+the pet still gets to chime in while Claude is working. Per-state
+cooldown of 5 minutes keeps idle↔sleep flapping from turning the pet
+into a chatterbox.
+
+This is the "fated" half of the fork's name. The pet on your wrist
+isn't a generic Buddy — it's *yours*, with the species, stats, name,
+and voice that the deterministic generator plus a one-shot offline
+hatch derived from your account.
+
+The `name` and `stateLines` come from `tools/my-buddy/my-buddy.json`.
+Once you've hatched (or recovered) yours, push them with:
+
+```bash
+bun run tools/my-buddy/push.js
+# emits three BLE frames to stdout: {cmd:"species"}, {cmd:"name"},
+# {cmd:"statelines"}. Pipe each to the Nordic UART RX characteristic
+# with whatever BLE writer you use (LightBlue, bleak, noble, …).
+# Or if the device is on USB, just write them to the serial port —
+# the firmware reads JSON from both bridges.
+```
+
+Pondsage (DUCK, common, WISDOM 68 / DEBUGGING 6) doesn't talk the same
+way a `legendary` `dragon` would:
+
+| state       | what Pondsage says            |
+| ----------- | ----------------------------- |
+| `sleep`     | the pond dreams too.          |
+| `idle`      | still water. still me.        |
+| `busy`      | the current does the work.    |
+| `attention` | someone's calling me.         |
+| `celebrate` | a quiet quack of yes.         |
+| `dizzy`     | even lakes catch chill.       |
+| `heart`     | two ripples, one pond.        |
+
+A `legendary` epic with `WISDOM 92 / CHAOS 88` would presumably say
+something a lot more deranged on `dizzy`. Voice rules — how stats and
+rarity shape the lines a buddy can say — live in
+[`tools/my-buddy/README.md`](tools/my-buddy/README.md) under
+*Offline-hatch protocol*.
+
+The on-device side also drops the "Owner's Buddy" header once a real
+name has been pushed: Pondsage stands as **Pondsage**, not as
+"Xiaofan's Pondsage". Owner is still visible on the INFO screen, so
+attribution isn't lost.
+
 ## Project layout
 
 ```
@@ -283,10 +334,6 @@ Things I'm poking at, lightly maintained, no schedule:
   capybara and you cycle to your fated species manually. The bridge
   could read `tools/my-buddy/my-buddy.json` and send the species command
   on connect.
-- **Render the personality on-device.** The `attention`/`celebrate`
-  states currently use generic strings; substituting your buddy's
-  `personality` into the speech bubble would make the stick feel more
-  like *yours*.
 - **Offline hatching helper.** A small script that takes bones +
   inspiration seed and asks a local Claude to generate
   `{name, personality}` in the original prompt format, for accounts that
