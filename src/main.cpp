@@ -1,6 +1,7 @@
 #include <M5StickCPlus.h>
 #include <LittleFS.h>
 #include <stdarg.h>
+#include <esp_log.h>
 #include "ble_bridge.h"
 #include "data.h"
 #include "buddy.h"
@@ -991,6 +992,32 @@ void drawSpeech() {
 
 void setup() {
   M5.begin();
+  // ── IWDT root-cause workaround ─────────────────────────────────────
+  // The interrupt watchdog kept tripping with EPC1 in uart_hal_write_txfifo
+  // and PC in spinlock_acquire — Bluedroid (Core 0) was holding the UART
+  // spinlock waiting for the TX FIFO to drain. Two fixes, both small:
+  //
+  // 1. Give Serial a real software TX buffer. Default is 0 — Serial.write
+  //    blocks on the 128-byte HW FIFO. With a 4 KB SW buffer the call
+  //    returns immediately and the IDF UART driver drains in the background,
+  //    so no critical section is ever held waiting for bytes to ship.
+  //
+  // 2. Silence Bluedroid's internal ESP_LOG output. Even without our app
+  //    logging, the BT stack itself logs from Core 0 under load; we can't
+  //    see those messages anyway and they were a contributor to the FIFO
+  //    pressure.
+  //
+  // M5.begin() already called Serial.begin(115200); we re-init the driver
+  // with a TX buffer. Order: end → setTxBufferSize → begin.
+  Serial.end();
+  Serial.setTxBufferSize(4096);
+  Serial.begin(115200);
+  esp_log_level_set("*", ESP_LOG_NONE);
+  // Belt + suspenders: level_set only filters tag-based ESP_LOGx. The
+  // Bluedroid component still has paths that go straight to the vprintf
+  // hook (raw printf, lwip-style traces). Replacing the hook with a
+  // nop drops everything before it can hit the UART driver.
+  esp_log_set_vprintf([](const char*, va_list) -> int { return 0; });
   M5.Lcd.setRotation(0);
   M5.Imu.Init();
   M5.Beep.begin();

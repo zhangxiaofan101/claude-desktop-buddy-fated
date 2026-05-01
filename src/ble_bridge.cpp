@@ -150,13 +150,17 @@ void bleInit(const char* deviceName) {
   BLEAdvertising* adv = BLEDevice::getAdvertising();
   adv->addServiceUUID(NUS_SERVICE_UUID);
   adv->setScanResponse(true);
-  // Connection interval in 1.25ms units. The old 0x06..0x12 (7.5..22.5ms)
-  // was Apple's "iOS friendly" range but it keeps the radio hot and feeds
-  // BT-task pressure. 0x18..0x28 (30..50ms) is plenty for an approval-
-  // chat workload (one write per few seconds) and gives Bluedroid more
-  // breathing room between events.
-  adv->setMinPreferred(0x18);
-  adv->setMaxPreferred(0x28);
+  // Connection interval in 1.25ms units. We *had* widened this to
+  // 0x18..0x28 (30..50ms) on reviewer suggestion, theory being it gives
+  // Bluedroid more breathing room between events. In the field that
+  // change correlated with MORE silent reboots, not fewer — Apple peers
+  // expect 15..30ms and will issue connection-update requests when the
+  // peripheral asks for anything outside that band, and each renegotiation
+  // is itself a LL state-machine churn for Bluedroid. So we keep the
+  // original Apple-friendly range; the real win was the deferred NVS
+  // and callback de-work, not the interval.
+  adv->setMinPreferred(0x06);
+  adv->setMaxPreferred(0x12);
   BLEDevice::startAdvertising();
   Serial.printf("[ble] advertising as '%s'\n", deviceName);
 }
