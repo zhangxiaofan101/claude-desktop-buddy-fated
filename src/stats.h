@@ -263,6 +263,45 @@ inline void speciesIdxSave(uint8_t idx) {
   _prefs.end();
 }
 
+// ─── State lines ─────────────────────────────────────────────────────────
+// One short personality line per firmware state, persisted to NVS so the
+// pet can talk autonomously without the desktop being connected. Pushed
+// in once at hatch via {"cmd":"statelines", ...}; see tools/my-buddy/.
+//
+// Keys: sl_sleep, sl_idle, sl_busy, sl_atten, sl_celeb, sl_dizzy, sl_heart
+// (NVS key max 15 chars, so abbreviated rather than the firmware names).
+
+static char _stateLines[7][48];   // sleep idle busy attention celebrate dizzy heart
+
+inline const char* _stateLineKey(uint8_t idx) {
+  static const char* keys[7] = {
+    "sl_sleep", "sl_idle", "sl_busy", "sl_atten",
+    "sl_celeb", "sl_dizzy", "sl_heart"
+  };
+  return (idx < 7) ? keys[idx] : "sl_idle";
+}
+
+inline void stateLinesLoad() {
+  _prefs.begin("buddy", true);
+  for (uint8_t i = 0; i < 7; i++) {
+    _stateLines[i][0] = 0;
+    _prefs.getString(_stateLineKey(i), _stateLines[i], sizeof(_stateLines[i]));
+  }
+  _prefs.end();
+}
+
+inline void stateLineSet(uint8_t idx, const char* line) {
+  if (idx >= 7) return;
+  _safeCopy(_stateLines[idx], sizeof(_stateLines[idx]), line ? line : "");
+  _prefs.begin("buddy", false);
+  _prefs.putString(_stateLineKey(idx), _stateLines[idx]);
+  _prefs.end();
+}
+
+inline const char* stateLineGet(uint8_t idx) {
+  return (idx < 7) ? _stateLines[idx] : "";
+}
+
 inline Settings& settings() { return _settings; }
 
 inline const Stats& stats() { return _stats; }

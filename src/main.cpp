@@ -36,6 +36,22 @@ TamaState    tama;
 PersonaState baseState   = P_SLEEP;
 PersonaState activeState = P_SLEEP;
 uint32_t     oneShotUntil = 0;
+
+// Speech overlay: brief personality line shown in the HUD area on state
+// transitions. Set by buddySay(); rendered by drawHUD() only when there's
+// no Claude transcript or prompt active (work always wins over chatter).
+char         speechLine[64] = {0};
+uint32_t     speechUntilMs  = 0;
+// Per-state cooldown so idle↔sleep flapping doesn't make the pet a chatterbox.
+uint32_t     stateLineLastMs[7] = {0};
+const uint32_t STATE_LINE_COOLDOWN_MS = 5UL * 60UL * 1000UL;   // 5 min
+
+inline void buddySay(const char* line, uint32_t durMs = 4000) {
+  if (!line || !line[0]) return;
+  strncpy(speechLine, line, sizeof(speechLine) - 1);
+  speechLine[sizeof(speechLine) - 1] = 0;
+  speechUntilMs = millis() + durMs;
+}
 uint32_t     lastShakeCheck = 0;
 float        accelBaseline = 1.0f;
 unsigned long t = 0;
@@ -877,8 +893,14 @@ void drawPet() {
   spr.setTextSize(1);
   spr.setTextColor(p.text, p.bg);
   spr.setCursor(4, y + 2);
-  if (ownerName()[0]) {
-    spr.printf("%s's %s", ownerName(), petName());
+  // Header rule: if a real pet name has been set (not the factory default
+  // "Buddy"), it stands on its own — Pondsage is Pondsage, not "Xiaofan's
+  // Pondsage". Owner is still visible on the INFO screen. Fall back to
+  // "Owner's buddy" only when the buddy hasn't been named yet.
+  if (petName()[0] && strcmp(petName(), "Buddy") != 0) {
+    spr.print(petName());
+  } else if (ownerName()[0]) {
+    spr.printf("%s's buddy", ownerName());
   } else {
     spr.print(petName());
   }
@@ -898,9 +920,22 @@ void drawHUD() {
   if (tama.lineGen != lastLineGen) { msgScroll = 0; lastLineGen = tama.lineGen; wake(); }
 
   if (tama.nLines == 0) {
+    // Speech overlay takes precedence over the static msg when active —
+    // the pet "saying something" beats the placeholder ("No Claude
+    // connected" / etc). Wraps to up to 3 rows.
+    bool speaking = speechLine[0] && (int32_t)(speechUntilMs - millis()) > 0;
     spr.setTextColor(p.text, p.bg);
-    spr.setCursor(4, H - LH - 2);
-    spr.print(tama.msg);
+    if (speaking) {
+      char wrapped[3][24];
+      uint8_t got = wrapInto(speechLine, wrapped, 3, WIDTH);
+      for (uint8_t i = 0; i < got; i++) {
+        spr.setCursor(4, H - AREA + 2 + i * LH);
+        spr.print(wrapped[i]);
+      }
+    } else {
+      spr.setCursor(4, H - LH - 2);
+      spr.print(tama.msg);
+    }
     return;
   }
 
@@ -948,6 +983,7 @@ void setup() {
   statsLoad();
   settingsLoad();
   petNameLoad();
+  stateLinesLoad();
   buddyInit();
 
   // BLE stays always-on; s.bt is stored as a preference only.
@@ -965,7 +1001,12 @@ void setup() {
     spr.fillSprite(p.bg);
     spr.setTextDatum(MC_DATUM);
     spr.setTextSize(2);
-    if (ownerName()[0]) {
+    bool named = petName()[0] && strcmp(petName(), "Buddy") != 0;
+    if (named) {
+      // Named buddy: name stands alone, big and centered.
+      spr.setTextColor(p.body, p.bg);   spr.drawString(petName(), W/2, H/2);
+    } else if (ownerName()[0]) {
+      // Owner set but buddy unnamed — keep the apostrophe form as before.
       char line[40];
       snprintf(line, sizeof(line), "%s's", ownerName());
       spr.setTextColor(p.text, p.bg);   spr.drawString(line, W/2, H/2 - 12);
@@ -1000,6 +1041,28 @@ void loop() {
   if (baseState == P_IDLE && (int32_t)(now - wakeTransitionUntil) < 0) baseState = P_SLEEP;
 
   if ((int32_t)(now - oneShotUntil) >= 0) activeState = baseState;
+
+  // State-line hook: on transition into a new state, show that state's
+  // personality line in the HUD. Throttle per-state so idle↔sleep churn
+  // doesn't make the pet a chatterbox. No line set for that state? Stay
+  // silent. Don't speak while a permission prompt is active — that screen
+  // already commands the bottom region.
+  {
+    static PersonaState prevSpokenState = (PersonaState)0xFF;
+    if (activeState != prevSpokenState && !tama.promptId[0]) {
+      uint8_t i = (uint8_t)activeState;
+      if (i < 7
+          && (stateLineLastMs[i] == 0
+              || (now - stateLineLastMs[i]) > STATE_LINE_COOLDOWN_MS)) {
+        const char* line = stateLineGet(i);
+        if (line && line[0]) {
+          buddySay(line, 4500);
+          stateLineLastMs[i] = now;
+        }
+      }
+      prevSpokenState = activeState;
+    }
+  }
 
   // LED: pulse on attention, otherwise off
   if (activeState == P_ATTENTION && settings().led) {

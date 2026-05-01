@@ -19,13 +19,13 @@
   "name": "Pondsage",
   "personality": "Lakeside sage. Speaks in flat quacks. Profound until a stack trace appears.",
   "stateLines": {
-    "sleep": "the pond dreams too.",
-    "idle":  "still water. still me.",
-    "happy": "a quiet quack of yes.",
-    "sad":   "today the reeds bend low.",
-    "busy":  "the current does the work.",
-    "love":  "two ripples, one pond.",
-    "sick":  "even lakes catch chill."
+    "sleep":     "the pond dreams too.",
+    "idle":      "still water. still me.",
+    "busy":      "the current does the work.",
+    "attention": "someone's calling me.",
+    "celebrate": "a quiet quack of yes.",
+    "dizzy":     "even lakes catch chill.",
+    "heart":     "two ripples, one pond."
   },
   "hatchedAt": "2026-05-01T00:00:00.000Z",
   "hatchedBy": "claude-opus-4-7 (offline hatch — original buddy_react endpoint was shut down ~2026-04-10)"

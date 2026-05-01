@@ -68,17 +68,18 @@ should fill **all** of the following fields in `my-buddy.json`:
 
 `stateLines` covers the seven firmware states. Keep each line short (≤8
 words) — they're meant to flash on a 240×135 screen, not to be read like
-prose:
+prose. Keys must match the firmware's state vocabulary exactly (see
+`stateNames[]` in `src/main.cpp`):
 
 ```json
 "stateLines": {
-  "sleep": "...",
-  "idle":  "...",
-  "happy": "...",
-  "sad":   "...",
-  "busy":  "...",
-  "love":  "...",
-  "sick":  "..."
+  "sleep":     "...",  // P_SLEEP     — napping, low activity
+  "idle":      "...",  // P_IDLE      — connected, hanging out
+  "busy":      "...",  // P_BUSY      — multiple sessions running
+  "attention": "...",  // P_ATTENTION — permission prompt waiting
+  "celebrate": "...",  // P_CELEBRATE — task just completed / level up
+  "dizzy":     "...",  // P_DIZZY    — shaken, late night
+  "heart":     "..."   // P_HEART    — affection / weekend / lunch
 }
 ```
 

@@ -109,6 +109,26 @@ inline bool xferCommand(JsonDocument& doc) {
     return true;
   }
 
+  if (strcmp(cmd, "statelines") == 0) {
+    // {"cmd":"statelines","sleep":"...","idle":"...","busy":"...",
+    //  "attention":"...","celebrate":"...","dizzy":"...","heart":"..."}
+    // Any subset of keys is fine; missing keys leave existing NVS value
+    // untouched. Empty string clears that state's line.
+    static const char* keys[7] = {
+      "sleep", "idle", "busy", "attention", "celebrate", "dizzy", "heart"
+    };
+    uint8_t set = 0;
+    for (uint8_t i = 0; i < 7; i++) {
+      JsonVariant v = doc[keys[i]];
+      if (!v.isNull() && v.is<const char*>()) {
+        stateLineSet(i, v.as<const char*>());
+        set++;
+      }
+    }
+    _xAck("statelines", set > 0);
+    return true;
+  }
+
   if (strcmp(cmd, "status") == 0) {
     // Dump everything the info screens show. Manual printf rather than
     // ArduinoJson serialize — less heap churn, and the shape is fixed.
