@@ -117,16 +117,16 @@ inline bool xferCommand(JsonDocument& doc) {
     static const char* keys[7] = {
       "sleep", "idle", "busy", "attention", "celebrate", "dizzy", "heart"
     };
-    uint8_t mask = 0;
+    uint8_t setMask = 0, dirtyMask = 0;
     for (uint8_t i = 0; i < 7; i++) {
       JsonVariant v = doc[keys[i]];
       if (!v.isNull() && v.is<const char*>()) {
-        stateLineSetMem(i, v.as<const char*>());
-        mask |= (1u << i);
+        setMask |= (1u << i);
+        if (stateLineSetMem(i, v.as<const char*>())) dirtyMask |= (1u << i);
       }
     }
-    stateLinesCommit(mask);   // single begin/end, all keys in one shot
-    _xAck("statelines", mask != 0);
+    stateLinesCommit(dirtyMask);   // only writes keys that actually changed
+    _xAck("statelines", setMask != 0);
     return true;
   }
 

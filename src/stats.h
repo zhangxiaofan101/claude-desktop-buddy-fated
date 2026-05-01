@@ -246,7 +246,16 @@ static void _safeCopy(char* dst, size_t dstLen, const char* src) {
 }
 
 inline void petNameSet(const char* name) {
-  _safeCopy(_petName, sizeof(_petName), name);
+  char incoming[sizeof(_petName)];
+  _safeCopy(incoming, sizeof(incoming), name);
+  // No-op fast path: skip the flash write entirely if the value
+  // hasn't changed. The desktop bridge re-sends owner / name on
+  // every BLE reconnect; without this guard, a flaky link can churn
+  // NVS sectors and the resulting flash-erase pauses can disable
+  // interrupts long enough to trip IWDT. flash wear cycles also
+  // matter (~100K erase per sector).
+  if (strcmp(incoming, _petName) == 0) return;
+  memcpy(_petName, incoming, sizeof(_petName));
   _prefs.begin("buddy", false);
   _prefs.putString("petname", _petName);
   _prefs.end();
@@ -255,7 +264,13 @@ inline void petNameSet(const char* name) {
 inline const char* petName() { return _petName; }
 
 inline void ownerSet(const char* name) {
-  _safeCopy(_ownerName, sizeof(_ownerName), name);
+  char incoming[sizeof(_ownerName)];
+  _safeCopy(incoming, sizeof(incoming), name);
+  // Same no-op skip as petNameSet — owner is re-sent on every BLE
+  // reconnect. This is the single biggest source of unnecessary NVS
+  // churn on this firmware.
+  if (strcmp(incoming, _ownerName) == 0) return;
+  memcpy(_ownerName, incoming, sizeof(_ownerName));
   _prefs.begin("buddy", false);
   _prefs.putString("owner", _ownerName);
   _prefs.end();
@@ -278,6 +293,11 @@ inline uint8_t speciesIdxLoad() {
 }
 
 inline void speciesIdxSave(uint8_t idx) {
+  // Skip if unchanged. Desktop occasionally re-sends species too.
+  _prefs.begin("buddy", true);
+  uint8_t cur = _prefs.getUChar("species", 0xFF);
+  _prefs.end();
+  if (cur == idx) return;
   _prefs.begin("buddy", false);
   _prefs.putUChar("species", idx);
   _prefs.end();
@@ -318,12 +338,17 @@ inline void stateLinesLoad() {
 
 // In-memory write only — no flash commit. Call stateLinesCommit() once
 // after a batch to persist. Splitting these prevents a multi-key BLE
-// frame (statelines cmd) from doing 7 sequential NVS commits inside the
-// BLE rx callback, which holds flash bus + critical sections long
-// enough to starve Bluedroid's osi_thread and trip IWDT on Core 0.
-inline void stateLineSetMem(uint8_t idx, const char* line) {
-  if (idx >= 7) return;
-  _safeCopy(_stateLines[idx], sizeof(_stateLines[idx]), line ? line : "");
+// frame (statelines cmd) from doing 7 sequential NVS commits, which
+// would hold the flash bus and disable interrupts long enough to trip
+// IWDT. Returns true if the value actually changed (caller can use
+// the return to skip including unchanged keys in the commit mask).
+inline bool stateLineSetMem(uint8_t idx, const char* line) {
+  if (idx >= 7) return false;
+  char incoming[sizeof(_stateLines[0])];
+  _safeCopy(incoming, sizeof(incoming), line ? line : "");
+  if (strcmp(incoming, _stateLines[idx]) == 0) return false;
+  memcpy(_stateLines[idx], incoming, sizeof(_stateLines[idx]));
+  return true;
 }
 
 inline void stateLinesCommit(uint8_t mask) {
