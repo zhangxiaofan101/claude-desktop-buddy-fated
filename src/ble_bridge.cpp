@@ -126,14 +126,17 @@ void bleInit(const char* deviceName) {
   cccd->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED);
   txChar->addDescriptor(cccd);
 
-  // WRITE only — no WRITE_NR. Write-without-response lets the central
-  // fire commands faster than the GATT server can process them, and the
-  // resulting backlog inside Bluedroid is a known IWDT trigger when the
-  // foreground is also doing flash work. The bridge sends one JSON line
-  // at a time and waits for an ack anyway, so WRITE (acked) is correct.
+  // Both WRITE and WRITE_NR. macOS Core Bluetooth heartbeats the link
+  // with writeWithoutResponse and falls silent if the characteristic
+  // doesn't expose WRITE_NR — the writes get rejected by the local
+  // GATT layer and never hit the air, so the desktop sees "Connected"
+  // but the device sees zero bytes. We had removed WRITE_NR thinking
+  // it would relieve Bluedroid pressure; the IWDT root cause turned
+  // out to be UART blocking (3fd7c67), not WRITE_NR backlog, so the
+  // restriction was costing us protocol compatibility for no benefit.
   rxChar = svc->createCharacteristic(
     NUS_RX_UUID,
-    BLECharacteristic::PROPERTY_WRITE
+    BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
   );
   rxChar->setAccessPermissions(ESP_GATT_PERM_WRITE_ENCRYPTED);
   rxChar->setCallbacks(new RxCallbacks());
