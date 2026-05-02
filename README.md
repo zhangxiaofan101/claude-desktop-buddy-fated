@@ -29,13 +29,13 @@ used.
 
 ## Quickstart
 
-Five steps end-to-end. Numbered so you don't have to read the rest of
+Four steps end-to-end. Numbered so you don't have to read the rest of
 the README to get going. Each step links into the section below it for
 the deep version.
 
 ```
- 1. RECOVER  ─→  2. HATCH  ─→  3. FLASH  ─→  4. PAIR  ─→  5. (optional) PUSH
-   bones        name+lines       firmware        BLE          tweak live
+ 1. RECOVER  ─→  2. HATCH  ─→  3. FLASH  ─→  4. PAIR
+   bones        name+lines       firmware        BLE
 ```
 
 ### 1. Recover your bones
@@ -151,24 +151,6 @@ Once paired, the bridge auto-reconnects whenever both sides are awake.
 > GrowthBook feature flag fetch is blocked on your network. See
 > **[`tools/enable-hardware-buddy/`](tools/enable-hardware-buddy/)**
 > for a local-override workaround.
-
-### 5. (optional) Push live edits
-
-Steps 1–3 already produce the canonical buddy — most users stop there.
-But if you want to **tweak the name or any state line without
-reflashing**, push them at runtime:
-
-```bash
-bun run tools/my-buddy/push.js
-```
-
-Emits three BLE-ready JSON frames to stdout (`species`, `name`,
-`statelines`) from your `my-buddy.json`. Send each line to the Nordic
-UART RX characteristic via your favorite BLE writer (LightBlue, bleak,
-noble, …). Or, if the device is plugged in over USB, write them
-straight to the serial port — the firmware parses JSON from both
-bridges. NVS overrides compile-time defaults, so a push wins until the
-next factory reset.
 
 ---
 
@@ -305,10 +287,14 @@ fated bones describe, with art that matches its personality rather than
 the generic per-species ASCII art.
 
 This fork ships [`characters/cogito/`](characters/cogito/) as the worked
-example. Cogito is the buddy hatched from seed `zhangxiaofan101` — bones
-say "robot", LLM-hatched personality leans precise / contemplative /
-quietly proud — and the GIF pack draws a metallic-grey cogito robot
-across the seven states matching that brief.
+example. Cogito is my own fated buddy — bones say "robot", LLM-hatched
+personality leans precise / contemplative / quietly proud — and the GIF
+pack draws a metallic-grey cogito robot across the seven states matching
+that brief.
+
+<p align="center">
+  <img src="characters/cogito-preview.png" alt="Cogito GIF pack preview — seven states across the metallic-grey robot" width="500">
+</p>
 
 [`tools/draw_cogito_character.py`](tools/draw_cogito_character.py) is
 how it was made: pure Python + Pillow, ~450 lines, no external assets.

@@ -23,14 +23,14 @@ Code 本命同伴——物种、名字、七条状态台词，全部由你的 ac
 
 ---
 
-## 上手五步
+## 上手四步
 
-端到端五步搞定，编号过的——你不用读后面其它任何章节也能跑起来。
+端到端四步搞定，编号过的——你不用读后面其它任何章节也能跑起来。
 每步都对应下面有详细解释的小节。
 
 ```
- 1. 算骨架  ─→  2. 孵灵魂  ─→  3. 烧固件  ─→  4. 配对  ─→  5. （可选）热推
-   bones      name + lines      firmware       BLE         不重刷在线改
+ 1. 算骨架  ─→  2. 孵灵魂  ─→  3. 烧固件  ─→  4. 配对
+   bones      name + lines      firmware       BLE
 ```
 
 ### 1. 算骨架（bones）
@@ -138,21 +138,6 @@ factory reset → 连点两下**。
 > feature flag fetch 在你网络路径上被卡时的已知问题。
 > **[`tools/enable-hardware-buddy/`](tools/enable-hardware-buddy/)**
 > 提供本地 override workaround。
-
-### 5. （可选）热推改动
-
-第 1–3 步走完已经是你的本命 buddy 了——大多数人到这就停了。但如果
-你想**改名字或某条 state line 而不重刷固件**，可以运行时推：
-
-```bash
-bun run tools/my-buddy/push.js
-```
-
-输出三条 BLE-ready JSON 帧到 stdout（`species` / `name` /
-`statelines`）。用你常用的 BLE writer（LightBlue / bleak / noble
-等）把每行写到 Nordic UART RX 字符。或者设备插着 USB 时直接写串
-口——固件两条通路都解析 JSON。NVS 优先级高于编译期默认值，所以一
-旦推过就以 push 为准，直到下一次 factory reset。
 
 ---
 
@@ -277,9 +262,13 @@ ASCII 宠物只用命定 seed 就能算出来 —— 物种、名字、七句性
 按物种分的 ASCII 美工。
 
 本 fork 把 [`characters/cogito/`](characters/cogito/) 作为完整示例。
-Cogito 是种子 `zhangxiaofan101` 孵出来的 buddy —— 骨架是机器人，
-LLM 孵出的人设偏精确 / 沉思 / 安静的自豪 —— 这套 GIF pack 对应地
-画了一只金属灰的 cogito 机器人，覆盖七个状态，画风跟那段人设对得上。
+Cogito 是我自己的本命 buddy —— 骨架是机器人，LLM 孵出的人设偏精确
+/ 沉思 / 安静的自豪 —— 这套 GIF pack 对应地画了一只金属灰的 cogito
+机器人，覆盖七个状态，画风跟那段人设对得上。
+
+<p align="center">
+  <img src="characters/cogito-preview.png" alt="Cogito GIF pack 预览：金属灰机器人的七个状态" width="500">
+</p>
 
 [`tools/draw_cogito_character.py`](tools/draw_cogito_character.py) 是
 画它用的脚本：纯 Python + Pillow，~450 行，无外部素材依赖。程序化
