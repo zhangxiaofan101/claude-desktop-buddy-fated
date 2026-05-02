@@ -1037,10 +1037,11 @@ void setup() {
   spr.createSprite(W, H);
   characterInit(nullptr);  // scan /characters/ for whatever is installed
   gifAvailable = characterLoaded();
-  // species NVS: 0..N-1 = ASCII species, 0xFF = use GIF (also the default,
-  // so a fresh install lands on the GIF). With no GIF installed, 0xFF falls
-  // through to buddyInit()'s clamped default.
-  buddyMode = !(gifAvailable && speciesIdxLoad() == SPECIES_GIF);
+  // species NVS: 0..N-1 = ASCII species, 0xFF = use GIF. Treat an unset
+  // species key as GIF when a character pack is installed; speciesIdxLoad()
+  // applies the compiled ASCII fallback, so check the raw key here.
+  uint8_t savedSpecies = speciesIdxLoadRaw();
+  buddyMode = !(gifAvailable && savedSpecies == SPECIES_GIF);
   applyDisplayMode();
 
   {

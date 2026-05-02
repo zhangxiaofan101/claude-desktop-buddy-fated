@@ -322,6 +322,13 @@ inline uint8_t speciesIdxLoad() {
   return v;
 }
 
+inline uint8_t speciesIdxLoadRaw() {
+  _prefs.begin("buddy", true);
+  uint8_t v = _prefs.getUChar("species", 0xFF);
+  _prefs.end();
+  return v;
+}
+
 inline void speciesIdxSave(uint8_t idx) {
   // Skip if unchanged. Desktop occasionally re-sends species too.
   _prefs.begin("buddy", true);
