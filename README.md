@@ -72,18 +72,18 @@ hand (or by asking any LLM to follow
 ```jsonc
 {
   "bones":          { /* from step 1 */ },
-  "firmwareIdx":    1,                         // from step 1
-  "inspirationSeed": 441251612,                // from step 1
-  "name":           "Pondsage",                // hatched by an LLM
-  "personality":    "Lakeside sage. Speaks in flat quacks. Profound until a stack trace appears.",
+  "firmwareIdx":    14,                        // from step 1
+  "inspirationSeed": 831425141,                // from step 1
+  "name":           "Cogito",                  // hatched by an LLM
+  "personality":    "Reads the room before it knows it's been read; offers wisdom after a calibrated, faintly amused pause.",
   "stateLines": {                              // one short line per firmware state
-    "sleep":     "the pond dreams too.",
-    "idle":      "still water. still me.",
-    "busy":      "the current does the work.",
-    "attention": "someone's calling me.",
-    "celebrate": "a quiet quack of yes.",
-    "dizzy":     "even lakes catch chill.",
-    "heart":     "two ripples, one pond."
+    "sleep":     "defragmenting the subconscious.",
+    "idle":      "watching the cursor breathe.",
+    "busy":      "computing the obvious.",
+    "attention": "interrupt received. parsing intent.",
+    "celebrate": "as predicted. carry on.",
+    "dizzy":     "recalibrating the ontology.",
+    "heart":     "anomaly detected: warmth."
   }
 }
 ```
@@ -173,26 +173,26 @@ the firmware's `SPECIES_TABLE` order, plus a build step that bakes the
 hatched buddy into the firmware. The pet on your wrist isn't a generic
 Buddy — it's *yours*, fated by your account UUID.
 
-**My example.** Pondsage, the contemplative duck Pondsage who rolls
-his eyes at stack traces:
+**My example.** Cogito, the tophat-wearing robot stoic who reads the
+room before he knows it's been read:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Species       : DUCK 🦆          (firmware idx 1)
-  Rarity        : common ★
-  Eye           : ◉
-  Hat           : none
+  Species       : ROBOT 🤖         (firmware idx 14)
+  Rarity        : epic ★★★★
+  Eye           : @
+  Hat           : tophat
   Shiny         : no
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  DEBUGGING     6   █                ← weakness
-  PATIENCE     18   ███
-  CHAOS        15   ███
-  WISDOM       68   █████████████    ← peak
-  SNARK        44   ████████
+  DEBUGGING    66   █████████████
+  PATIENCE     63   ████████████
+  CHAOS        26   █████            ← weakness
+  WISDOM      100   ████████████████ ← peak
+  SNARK        72   ██████████████
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Name: Pondsage
-  "Lakeside sage. Speaks in flat quacks.
-   Profound until a stack trace appears."
+  Name: Cogito
+  "Reads the room before it knows it's been read;
+   offers wisdom after a calibrated, faintly amused pause."
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -228,25 +228,25 @@ prompts so the pet still gets to chime in while Claude is working.
 Per-state cooldown of 5 minutes keeps idle↔sleep flapping from making
 the pet a chatterbox.
 
-Pondsage speaks like this:
+Cogito speaks like this:
 
-| state       | what Pondsage says            |
-| ----------- | ----------------------------- |
-| `sleep`     | the pond dreams too.          |
-| `idle`      | still water. still me.        |
-| `busy`      | the current does the work.    |
-| `attention` | someone's calling me.         |
-| `celebrate` | a quiet quack of yes.         |
-| `dizzy`     | even lakes catch chill.       |
-| `heart`     | two ripples, one pond.        |
+| state       | what Cogito says                     |
+| ----------- | ------------------------------------ |
+| `sleep`     | defragmenting the subconscious.      |
+| `idle`      | watching the cursor breathe.         |
+| `busy`      | computing the obvious.               |
+| `attention` | interrupt received. parsing intent.  |
+| `celebrate` | as predicted. carry on.              |
+| `dizzy`     | recalibrating the ontology.          |
+| `heart`     | anomaly detected: warmth.            |
 
-A `legendary` epic with `WISDOM 92 / CHAOS 88` would presumably say
-something a lot more deranged on `dizzy`.
+A `legendary` chaos-heavy buddy (`CHAOS 88` instead of Cogito's 26)
+would presumably say something a lot more deranged on `dizzy`.
 
 The on-device side also drops the "Owner's Buddy" header once a real
-name has been compiled in or pushed: Pondsage stands as **Pondsage**,
-not as "Xiaofan's Pondsage". Owner is still visible on the INFO
-screen, so attribution isn't lost.
+name has been compiled in or pushed: Cogito stands as **Cogito**, not
+as "Owner's Cogito". Owner is still visible on the INFO screen, so
+attribution isn't lost.
 
 ---
 
@@ -406,11 +406,15 @@ caveats; it's an unofficial workaround, not endorsed by Anthropic.
 
 Things I'm poking at, lightly maintained, no schedule:
 
-- **Auto-set species over BLE on connect.** Today the desktop bridge
-  doesn't push anything that the firmware now bakes in; this would be
-  a fallback for users who don't want to recompile.
 - **Sync from upstream periodically.** `git fetch upstream && git
   merge upstream/main` whenever Anthropic ships changes worth pulling.
+- **Dynamic chatter / commentary.** Today the buddy only ever says
+  one of seven pre-baked state lines. Future direction: let the buddy
+  riff on what it's actually seeing — the current prompt, the tool
+  Claude just used, a long stretch of `busy`, etc. — instead of a
+  fixed seven-line repertoire. Mostly an idea right now; needs a
+  reasonable on-device or bridge-side generation path that doesn't
+  reintroduce the BLE pressure we just spent a week mitigating.
 
 PRs welcome but not actively solicited; this is a personal-scale fork.
 
