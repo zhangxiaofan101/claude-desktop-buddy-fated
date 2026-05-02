@@ -298,23 +298,39 @@ species (from `my-buddy.json`) only kicks in on a fresh / wiped NVS.
 
 ## GIF pets
 
-If you want a custom GIF character instead of an ASCII buddy, drag a
-character pack folder onto the drop target in the Hardware Buddy
-window. The app streams it over BLE and the stick switches to GIF mode
-live. **Settings → delete char** reverts to ASCII mode.
+The ASCII pet is what you get from the deterministic seed alone — a
+species, name, and seven personality lines. A **GIF pack** is the next
+step: actually drawing the buddy so the screen shows the character your
+fated bones describe, with art that matches its personality rather than
+the generic per-species ASCII art.
+
+This fork ships [`characters/cogito/`](characters/cogito/) as the worked
+example. Cogito is the buddy hatched from seed `zhangxiaofan101` — bones
+say "robot", LLM-hatched personality leans precise / contemplative /
+quietly proud — and the GIF pack draws a metallic-grey cogito robot
+across the seven states matching that brief.
+
+[`tools/draw_cogito_character.py`](tools/draw_cogito_character.py) is
+how it was made: pure Python + Pillow, ~450 lines, no external assets.
+Procedural drawing keeps the seven states stylistically tight (same
+body, same palette, just different expressions / poses) and lets you
+regenerate the whole pack after a tweak in seconds. Treat it as a
+template for drawing your own — fork the file, swap geometry / palette
+to match your bones + personality.
 
 A character pack is a folder with `manifest.json` and 96px-wide GIFs:
 
 ```json
 {
-  "name": "bufo",
+  "name": "cogito",
   "colors": {
-    "body": "#6B8E23", "bg": "#000000",
-    "text": "#FFFFFF", "textDim": "#808080", "ink": "#000000"
+    "body": "#B2BCBF", "bg": "#000000",
+    "text": "#FFFFFF", "textDim": "#808080", "ink": "#050607"
   },
   "states": {
     "sleep": "sleep.gif",
-    "idle": ["idle_0.gif", "idle_1.gif", "idle_2.gif"],
+    "idle": ["idle_0.gif", "idle_1.gif", "idle_2.gif",
+             "idle_3.gif", "idle_4.gif", "idle_5.gif"],
     "busy": "busy.gif", "attention": "attention.gif",
     "celebrate": "celebrate.gif", "dizzy": "dizzy.gif", "heart": "heart.gif"
   }
@@ -326,10 +342,12 @@ each loop end). GIFs are 96 px wide, height up to ~140 px stays on the
 135×240 portrait screen. The whole folder must fit under 1.8 MB —
 `gifsicle --lossy=80 -O3 --colors 64` typically cuts 40–60%.
 
-`tools/prep_character.py` handles resizing source GIFs;
-`tools/flash_character.py characters/bufo` skips the BLE round-trip and
-stages a pack into `data/` for `pio run -t uploadfs`. See
-`characters/bufo/` for a working example.
+Two ways to install a pack: drag the folder onto the Hardware Buddy
+window (BLE stream, switches modes live), or
+`python3 tools/flash_character.py characters/cogito` (USB, faster
+during iteration). **Settings → delete char** reverts to ASCII mode.
+[`characters/bufo/`](characters/bufo/) is a second example pack ported
+from upstream — community frog emoji set, not procedurally drawn.
 
 ---
 
@@ -350,6 +368,7 @@ characters/             — example GIF character packs
 tools/
   prep_character.py        — upstream: GIF resize/normalize helper
   flash_character.py       — upstream: USB-side character staging
+  draw_cogito_character.py — fork: example procedural GIF pack drawer
   my-buddy/                — fork: recover & hatch your fated buddy
     lib.js                 — shared roll algorithm (constants, PRNG, hashString)
     compute.js             — bones from accountUuid (deterministic)
